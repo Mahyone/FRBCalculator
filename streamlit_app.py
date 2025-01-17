@@ -44,25 +44,6 @@ def upload_arquivo():
 
     with tabs[0]:
         st.header("Glossário")
-
-        st.write("**Arquivo Modelo para Exportação**")
-
-            # Exibir as planilhas carregadas (para verificação) - Mostra o nome das planilhas
-            # st.write("Planilhas Carregadas:", df.keys())  
-
-            # Botão para download do arquivo Excel
-            st.download_button(
-                label="Download do Arquivo Excel",
-                data=file_data,
-                file_name="modelo_carregado.xlsx",  # Nome do arquivo a ser baixado
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        else:
-            st.warning("O arquivo modelo.xlsx não foi encontrado na pasta de execução.")
-
-
-
-
         st.write("### **Para Importação do arquivo em Excel, é necessário que as abas estejam nesse padrão:**")
 
         st.write("#### Aba 'Staff HeadCount:")
