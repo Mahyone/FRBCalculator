@@ -295,7 +295,7 @@ def upload_arquivo():
     with tabs[2]:
         st.header("Automação")
         st.write("""
-            Para o cálculo de espaços está sendo considerado 'Primary Work Seats'.
+            Para o cálculo de espaços está sendo considerado 'Primary Work Seats'.   
             As colunas de 'Proportional' são cálculos proporcionais baseado no Total de HeadCount por Grupo / HeadCount por SubGroup - uma vez que a aba 'Staff Occupancy' é por Group.
             """)
 
