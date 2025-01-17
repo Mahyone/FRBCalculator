@@ -47,19 +47,6 @@ def upload_arquivo():
 
         st.write("**Arquivo Modelo para Exportação**")
 
-        # Caminho do arquivo Excel na pasta de execução
-        file_path = 'Excel_Model.xlsx'  # Substitua pelo nome do seu arquivo
-
-        # Verificar se o arquivo existe
-        if os.path.exists(file_path):
-            # Carregar o arquivo Excel automaticamente
-            with open(file_path, 'rb') as f:
-                file_data = f.read()
-            
-            # Carregar o arquivo no pandas
-            with io.BytesIO(file_data) as file:
-                df = pd.read_excel(file, sheet_name=None)  # Carregar todas as planilhas
-            
             # Exibir as planilhas carregadas (para verificação) - Mostra o nome das planilhas
             # st.write("Planilhas Carregadas:", df.keys())  
 
