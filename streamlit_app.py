@@ -943,8 +943,8 @@ def upload_arquivo():
 
 
    ##### ABA DASHBOARDS #####
-    with tabs[3]:
-        st.write("### DASHBOARDS")
+with tabs[3]:
+    st.write("### DASHBOARDS")
  
 
 # Tela Inicial com Seleção
