@@ -1,19 +1,8 @@
-# 🎈 Blank app template
+# 🎈 Calculadora FRB - Cenários de Alocação
 
-A simple Streamlit app template for you to modify!
-
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://blank-app-template.streamlit.app/)
-
-### How to run it on your own machine
-
-1. Install the requirements
-
-   ```
-   $ pip install -r requirements.txt
-   ```
-
-2. Run the app
-
-   ```
-   $ streamlit run streamlit_app.py
-   ```
+Steps to do:
+1) Subir a aplicação em um link web;
+2) Adicionar visão de Dashboards;
+3) Adiconar no README todas as especificações e remover do 'Glossário' - direcionar o Glossário para o README, assim apenas pessoas autorizads terão acesso;
+4) Validar o link publicado com outro usuário;
+5) Enviar para o cliente validar;
