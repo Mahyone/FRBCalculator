@@ -11,7 +11,7 @@ import os
 st.set_page_config(page_title="Calculadora FRB - Alocação", page_icon="📊", layout="wide")
 
 # Carregar e exibir o logo
-logo = Image.open("FRBConsulting_Logo.png")  # Substitua 'logo.png' pelo nome do arquivo da sua imagem
+logo = Image.open("FRBConsulting_Logo.PNG")  
 st.image(logo, use_container_width=False) 
 
 
@@ -79,7 +79,7 @@ def upload_arquivo():
         st.write("### **Para Importação do arquivo em Excel, é necessário que as abas estejam nesse padrão:**")
 
         st.write("#### Aba 'Staff HeadCount:")
-        staffheadcountimage = Image.open("staffheadcountimage.png") 
+        staffheadcountimage = Image.open("staffheadcountimage.PNG") 
         st.image(staffheadcountimage, use_container_width=False) 
         st.write(""" Assegurar que as informações estejam dispostas como na imagem:   
                  - Cabeçalho estar na linha 4   
@@ -87,7 +87,7 @@ def upload_arquivo():
             """)
         
         st.write("#### Aba 'Staff Occupancy:")
-        staffoccupancyimage = Image.open("staffoccupancyimage.png") 
+        staffoccupancyimage = Image.open("staffoccupancyimage.PNG") 
         st.image(staffoccupancyimage, use_container_width=False) 
         st.write(""" Assegurar que as informações estejam dispostas como na imagem:   
                  - Cabeçalho estar na linha 4   
@@ -95,7 +95,7 @@ def upload_arquivo():
             """)
         
         st.write("#### Aba 'SubGroup Adjacencies:")
-        subgroupadjacenciesimage = Image.open("subgroupadjacenciesimage.png") 
+        subgroupadjacenciesimage = Image.open("subgroupadjacenciesimage.PNG") 
         st.image(subgroupadjacenciesimage, use_container_width=False) 
         st.write(""" Assegurar que as informações estejam dispostas como na imagem:   
                  - Cabeçalho estar na linha 4   
@@ -103,7 +103,7 @@ def upload_arquivo():
             """)
 
         st.write("#### Aba 'Building Space Summary:")
-        buildingspaceimage = Image.open("buildingspaceimage.png") 
+        buildingspaceimage = Image.open("buildingspaceimage.PNG") 
         st.image(buildingspaceimage, use_container_width=False) 
         st.write(""" Assegurar que as informações estejam dispostas como na imagem:   
                  - Cabeçalho estar na linha 7   
