@@ -1,11 +1,19 @@
 
+
+
+
+
 import streamlit as st
 from PIL import Image
 import pandas as pd
 import numpy as np
 from itertools import combinations
+import openpyxl
 import io
 import os
+import matplotlib.pyplot as plt
+import plotly.express as px
+import seaborn as sns
 
 # Definir a configuração da página no início
 st.set_page_config(page_title="Calculadora FRB - Alocação", page_icon="📊", layout="wide")
@@ -802,7 +810,33 @@ def upload_arquivo():
                     else:
                         # Se não houver seleção, mostra todos os dados
                         df_building_data_filtered = df_building_data
-                        
+
+
+                    # Recalcular os cálculos de Saldo e Cumsum após filtragem
+                    df_building_data_filtered['Lugares Ocupados 1:1'] = df_building_data_filtered['1:1'].cumsum()
+
+                    # Calcular 'Lugares Disponíveis 1:1' individualmente para cada andar
+                    df_building_data_filtered['Lugares Disponíveis 1:1'] = df_building_data_filtered.groupby('Building Name')['Primary Work Seats'].transform('first') - df_building_data_filtered['Lugares Ocupados 1:1']
+
+                    # Cálculos para Peak e Avg com exceção
+                    def calcular_lugares_ocupados(row, column_name, headcount_column):
+                        if row['Exception (Y/N)'] == 'Y':
+                            return row[headcount_column]
+                        return row[column_name]
+
+                    # Cálculo para 'Lugares Ocupados Peak'
+                    df_building_data_filtered['Lugares Ocupados Peak'] = df_building_data_filtered.apply(lambda row: calcular_lugares_ocupados(row, 'Peak', '1:1'), axis=1)
+                    
+                    # Cálculo para 'Lugares Ocupados Avg'
+                    df_building_data_filtered['Lugares Ocupados Avg'] = df_building_data_filtered.apply(lambda row: calcular_lugares_ocupados(row, 'Avg Occ', '1:1'), axis=1)
+
+                    # Cálculos acumulados para Peak e Avg
+                    df_building_data_filtered['Lugares Ocupados Peak'] = df_building_data_filtered.groupby('Building Name')['Lugares Ocupados Peak'].cumsum()
+                    df_building_data_filtered['Lugares Ocupados Avg'] = df_building_data_filtered.groupby('Building Name')['Lugares Ocupados Avg'].cumsum()
+
+                    # Calculando 'Lugares Disponíveis Peak' e 'Lugares Disponíveis Avg'
+                    df_building_data_filtered['Lugares Disponíveis Peak'] = df_building_data_filtered.groupby('Building Name')['Primary Work Seats'].transform('first') - df_building_data_filtered['Lugares Ocupados Peak']
+                    df_building_data_filtered['Lugares Disponíveis Avg'] = df_building_data_filtered.groupby('Building Name')['Primary Work Seats'].transform('first') - df_building_data_filtered['Lugares Ocupados Avg']                    
 
                     # Caixa de Texto para input de Margem de Growth e Risk          
                     growth_value = st.text_input(f"Growth (numérico, não digitar o símbolo '%') para {building}", value="", key=f"growth_input_{building}")
@@ -906,117 +940,135 @@ def upload_arquivo():
 
                     # Aplicando o estilo para as outras colunas (não Growth e Risk)
                     styled_df = styled_df.applymap(colorize, subset=['1:1', 'Saldo 1:1', 'Peak', 'Saldo Peak', 'Avg Occ', 'Saldo Avg Occ'])
-
-                    # Exibindo a tabela com o estilo aplicado
                     st.dataframe(styled_df, use_container_width=False, hide_index=True)
 
+
                     # Botão de Gravar Dados
+                    if "tables_to_append_df" not in st.session_state:
+                        st.session_state.tables_to_append_df = pd.DataFrame()  # DataFrame vazio para consolidar os dados
+
+                    # Botão de Gravar Dados para cada prédio
+                    if "tables_to_append_dict" not in st.session_state:
+                        st.session_state.tables_to_append_dict = {}
+
+                    # Botão de Gravar Dados para cada prédio
                     if st.button(f"Gravar Dados para {building}"):
-                        # Verificar se o Building Name já existe na lista
-                        building_exists = False
-                        for idx, df in enumerate(st.session_state.tables_to_append):
-                            if df['Building Name'].iloc[0] == building:
-                                # Se o 'Building Name' já existir, substituímos os dados dessa seção
-                                st.session_state.tables_to_append[idx] = styled_df.data  # Sobrescreve os dados
-                                building_exists = True
-                                break
-                        
-                        # Se o 'Building Name' não existir, adicionamos os novos dados à lista
-                        if not building_exists:
-                            st.session_state.tables_to_append.append(styled_df.data) 
+                        df_to_save = styled_df.data.copy() 
 
-        
-        else:
-            st.write("Por favor, carregue o arquivo para prosseguir.")
+                        if not df_to_save.empty:
+                            # Salva o DataFrame na sessão para esse `building`
+                            st.session_state.tables_to_append_dict[building] = df_to_save
 
-        # Ao final, exibir o expander para mostrar a tabela consolidada
-        with st.expander("### **Resultado de todos os Cenários:**"):
+                            st.success(f"Dados do prédio **{building}** gravados com sucesso!")
 
-            # Inicializar df_proportional como um DataFrame vazio, se não houver dados na sessão
-            if "df_proportional_cenarios" not in st.session_state:
-                df_proportional_cenarios = pd.DataFrame()  # DataFrame vazio
-            else:
-                df_proportional_cenarios = st.session_state.df_proportional_cenarios
-                
+            
+            # Ao final, exibir o expander para mostrar a tabela consolidada
+            with st.expander("### **Resultado de todos os Cenários:**"):
 
-            # Verificar se o df_proportional tem dados antes de continuar
-            if not df_proportional_cenarios.empty:
-                # Criação da tabela de cenários
-                df_proportional_cenarios = df_proportional_cenarios.copy()
-
-                # Se houver tabelas para consolidar
-                if st.session_state.tables_to_append:
-                    # Faz o append de todas as tabelas na lista
-                    final_consolidated_df = pd.concat(st.session_state.tables_to_append, ignore_index=True)
+                if st.session_state.tables_to_append_dict:
                     
+                    st.write("### **Dados Gravados**")
+
+                    #  Concatena todos os DataFrames armazenados na sessão
+                    final_consolidated_df = pd.concat(
+                        st.session_state.tables_to_append_dict.values(), ignore_index=True
+                    )
+
+                    #  Função para arredondar e tratar valores NaN
                     def round_and_convert_to_int(df):
-                        # Seleciona apenas as colunas numéricas
                         numeric_columns = df.select_dtypes(include=['number']).columns
                         df[numeric_columns] = df[numeric_columns].replace([np.inf, -np.inf, np.nan], 0)
                         df[numeric_columns] = df[numeric_columns].round(0).astype(int)                
                         return df
+
+                    #  Aplica a formatação final à tabela consolidada
                     final_consolidated_df = round_and_convert_to_int(final_consolidated_df)
 
-                    # Aplicando o estilo para as colunas
-                    final_consolidated_df_colour = final_consolidated_df.style
+                    #  Aplica cores de destaque na tabela consolidada
                     def colorize(val):
                         if isinstance(val, (int, float)):
                             if val >= 0:
-                                return 'background-color: white'  # Verde claro para valores positivos
+                                return 'background-color: white'  # Branco para valores positivos
                             elif val < 0:
                                 return 'background-color: #FFBDBD'  # Coral para valores negativos
-                        return 'background-color: white'  # Padrão branco para valores não numéricos
-                    final_consolidated_df_colour = final_consolidated_df_colour.applymap(colorize, subset=['1:1', 'Saldo 1:1', 'Peak', 'Saldo Peak', 'Avg Occ', 'Saldo Avg Occ'])
-                    
+                        return 'background-color: white'  # Branco para valores não numéricos
 
-                    # Exibe a tabela consolidada
+                    final_consolidated_df_colour = final_consolidated_df.style.applymap(
+                        colorize, subset=['1:1', 'Saldo 1:1', 'Peak', 'Saldo Peak', 'Avg Occ', 'Saldo Avg Occ']
+                    )
+
+
+                    # Exibe a tabela consolidada corretamente
                     st.write("#### **Consolidado de todos os cenários:**")
-                    st.dataframe(final_consolidated_df_colour, use_container_width=True,  hide_index=True)
+                    st.dataframe(final_consolidated_df_colour, use_container_width=True, hide_index=True)
 
-                    # Realizando o DISTINCT para obter os Grupos e Subgrupos não alocados
-                    # Criando uma tabela de chave (Group - SubGroup) em final_consolidated_df
-                    consolidated_groups_subgroups = final_consolidated_df[['Group', 'SubGroup']].drop_duplicates()
+                    # Criar a "chave" de identificação de Groups e Subgroups no consolidado
+                    final_consolidated_df["Chave"] = final_consolidated_df.apply(
+                        lambda row: f"{row['Group']} - {row['SubGroup']}" if row['SubGroup'] else f"{row['Group']} - ", axis=1
+                    )
 
-                    # Criando uma tabela de chave (Group - SubGroup) em df_proportional_cenarios
+                    # Criar a "chave" de identificação em `df_proportional_cenarios`
                     proportional_groups_subgroups = df_proportional_cenarios.copy()
-                    proportional_groups_subgroups = proportional_groups_subgroups.drop('Lugares Ocupados 1:1', axis=1)
+                    proportional_groups_subgroups["Chave"] = proportional_groups_subgroups.apply(
+                        lambda row: f"{row['Group']} - {row['SubGroup']}" if row['SubGroup'] else f"{row['Group']} - ", axis=1
+                    )
 
-                    # Realizando a diferença entre os Grupos/Subgrupos
-                    # Usamos 'merge' para identificar quais não estão em final_consolidated_df
-                    df_non_allocated = proportional_groups_subgroups.merge(consolidated_groups_subgroups,
-                                                                            how='left', 
-                                                                            indicator=True).query('_merge == "left_only"').drop('_merge', axis=1)
+                    # Selecionar apenas as colunas relevantes, removendo duplicatas
+                    consolidated_groups_subgroups = final_consolidated_df[['Chave']].drop_duplicates()
 
-                    # Exibindo os Grupos e Subgrupos não alocados
-                    st.write("#### Grupos e Subgrupos Não Alocados")
+                    # Realizar a diferença entre os Grupos/Subgrupos para encontrar os **não alocados**
+                    df_non_allocated = proportional_groups_subgroups.merge(
+                        consolidated_groups_subgroups, on="Chave", how="left", indicator=True
+                    ).query('_merge == "left_only"').drop('_merge', axis=1)
+
+                    # Exibir os Grupos e Subgrupos não alocados
+                    st.write("#### **Grupos e Subgrupos Não Alocados**")
                     st.dataframe(df_non_allocated, use_container_width=False, hide_index=True)
 
-                    # Botão para exportar tabela "Cenários" para Excel
+                    # Adiciona a tabelano st_session_state
+                    st.session_state["final_consolidated_df"] = final_consolidated_df
+
+
                     if st.button("Exportar 'Cenários' para Excel", key="export_cenarios_excel"):
                         with io.BytesIO() as output:
-                            # Criação do ExcelWriter
+                            # Criar um ExcelWriter para escrever os dados no arquivo
                             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                                # Exportando final_consolidated_df para a aba "Cenarios"
-                                final_consolidated_df = st.session_state.final_consolidated_df
-                                final_consolidated_df = final_consolidated_df.fillna("")  # Substituindo NaN por ""
+                                
+                                #  Recupera os dados consolidados da sessão
+                                if "tables_to_append_dict" in st.session_state and st.session_state.tables_to_append_dict:
+                                    final_consolidated_df = pd.concat(
+                                        st.session_state.tables_to_append_dict.values(), ignore_index=True
+                                    )
+                                else:
+                                    final_consolidated_df = pd.DataFrame()  # DataFrame vazio se não houver dados
+
+                                #  Recupera os dados de "Não Alocados"
+                                if "df_non_allocated" in st.session_state:
+                                    df_non_allocated = st.session_state.df_non_allocated.copy()
+                                else:
+                                    df_non_allocated = pd.DataFrame()  # DataFrame vazio se não houver dados
+
+                                #  Tratamento de valores NaN
+                                final_consolidated_df = final_consolidated_df.fillna("")
+                                df_non_allocated = df_non_allocated.fillna("")
+
+                                #  Exporta final_consolidated_df para a aba "Cenarios"
                                 final_consolidated_df.to_excel(writer, sheet_name="Cenarios", index=False)
 
-                                # Exportando df_non_allocated para a aba "Não Alocados"
-                                df_non_allocated = st.session_state.df_non_allocated
-                                df_non_allocated = df_non_allocated.fillna("")  # Substituindo NaN por ""
+                                #  Exporta df_non_allocated para a aba "Não Alocados"
                                 df_non_allocated.to_excel(writer, sheet_name="Não Alocados", index=False)
 
-                            # Exibindo o botão de download
+                            # Exibe o botão de download
                             st.download_button(
                                 label="Download do Excel - Cenários e Não Alocados",
                                 data=output.getvalue(),
                                 file_name="Cenarios_e_Nao_Alocados.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
-                    
+                   
 
-            else:
-                st.write("Nenhum dado foi gravado ainda.")
+        else:
+            st.write("Nenhum dado foi gravado ainda.")
 
 
         if st.button("Resetar Cenários"):
@@ -1036,6 +1088,683 @@ def upload_arquivo():
    ##### ABA DASHBOARDS #####
     with tabs[4]:
         st.write("### DASHBOARDS")
+
+        # Inicializar dfautomation_hc como um DataFrame vazio, se não houver dados na sessão
+        if "dfautomation_hc" not in st.session_state:
+            dfautomation_hc = pd.DataFrame()  # DataFrame vazio
+            final_consolidated_df = pd.DataFrame()
+            styled_df = pd.DataFrame()
+            dfautomation_peak_dash = pd.DataFrame() 
+            dfautomation_avg_dash = pd.DataFrame() 
+            df_building_trat = pd.DataFrame()
+
+        else:
+            dfautomation_hc = st.session_state.dfautomation_hc
+            # Se necessário, acesse outros DataFrames salvos no session_state
+            final_consolidated_df = st.session_state.get('final_consolidated_df', pd.DataFrame())
+            styled_df = st.session_state.get('styled_df', pd.DataFrame())
+            dfautomation_peak_dash = st.session_state.get('dfautomation_peak_dash', pd.DataFrame())
+            dfautomation_avg_dash = st.session_state.get('dfautomation_avg_dash', pd.DataFrame())
+            df_building_dash = st.session_state.get('df_building_trat', pd.DataFrame())
+
+        # Verificar se os DataFrames têm dados antes de continuar
+        if not dfautomation_hc.empty:
+            # Criação das tabelas de cenários
+            dfautomation_hc_dash = dfautomation_hc.copy()
+            dfautomation_peak_dash = dfautomation_peak.copy()
+            dfautomation_avg_dash = dfautomation_avg.copy()
+            df_building_dash = df_building_trat.copy()
+
+
+            # Adicionar um seletor para o usuário escolher qual tabela exibir
+            visao_selecionada = st.selectbox(
+                'Escolha a tabela para visualizar:',
+                ('Cenarios', 'Automações')
+            )
+
+            # Exibir a tabela com base na escolha do usuário
+            if visao_selecionada == 'Automações':
+            
+                
+            # Merge para unir informações de ocupação por HEADCOUNT
+                df_merged_hc = pd.merge(dfautomation_hc_dash, df_building_dash[['Building Name', 'Primary Work Seats', 'Total seats on floor']], on='Building Name', how='left')
+                df_merged_sorted_hc = df_merged_hc.sort_values(by=['Building Name', 'Group', 'SubGroup'])
+                df_merged_sorted_hc['CumSum HeadCount'] = df_merged_sorted_hc.groupby('Building Name')['HeadCount'].cumsum()
+                df_merged_sorted_hc['AvailableCumSum'] = df_merged_sorted_hc['Primary Work Seats'] - df_merged_sorted_hc['CumSum HeadCount']
+
+                # Lugares Disponíveis por Andar
+                df_last_cumsum_hc = df_merged_sorted_hc.groupby('Building Name').last().reset_index()
+                df_last_cumsum_hc['Avail Total Seats HC'] = df_last_cumsum_hc['Total seats on floor'] - df_last_cumsum_hc['CumSum HeadCount']
+                df_last_cumsum_hc['Avail Primary HC'] = df_last_cumsum_hc['Primary Work Seats'] - df_last_cumsum_hc['CumSum HeadCount']
+                df_availability_hc = df_last_cumsum_hc[['Building Name', 'CumSum HeadCount', 'Primary Work Seats', 'Avail Primary HC', 'Total seats on floor',  'Avail Total Seats HC']]
+                total_row_hc = df_availability_hc[['CumSum HeadCount', 'Primary Work Seats', 'Avail Primary HC', 'Total seats on floor',  'Avail Total Seats HC']].sum()
+                total_row_hc['Building Name'] = 'Total'  
+                df_avail_row_hc = pd.DataFrame([total_row_hc])
+                df_avail_hc = pd.concat([df_availability_hc, df_avail_row_hc], ignore_index=True)
+                df_avail_hc.rename(columns={"CumSum HeadCoun" : "Total HC"})
+
+            #### BIG NUMBERS - CABEÇALHO PAINEL
+                # Calculando as métricas
+                # 1) Qtde de Buildings
+                num_buildings = df_building_dash['Building Name'].nunique()
+
+                # 2) Qtde de Groups
+                num_groups = df_merged_hc['Group'].nunique()
+
+                # 3) Qtde de Groups + SubGroups
+                num_groups_subgroups = df_merged_hc[['Group', 'SubGroup']].drop_duplicates().shape[0]
+
+                # 4) Total de Lugares Disponíveis (Primary Work Seats)
+                total_primary_seats = df_building_dash['Primary Work Seats'].sum()
+
+                # 5) Total de Lugares Disponíveis (Total Seats on Floor)
+                total_floor_seats = df_building_dash['Total seats on floor'].sum()
+
+
+                # Organizando os Big Numbers em colunas
+                col1, col2, col3, col4, col5  = st.columns(5)  
+
+                with col1:
+                    # Título com fonte e alinhamento
+                    st.markdown(f"<h4 style='text-align: center; background-color: #4682B4; padding: 10px; font-size: 16px; color: white; '> Qtde de Andares</h4>", unsafe_allow_html=True)                
+                    # Número com fonte personalizada e centralizado
+                    st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{num_buildings}</h1>", unsafe_allow_html=True)
+                with col2:
+                    st.markdown(f"<h4 style='text-align: center; background-color: #ADD8E6; padding: 10px; font-size: 16px;'> Qtde de Grupos</h4>", unsafe_allow_html=True) 
+                    st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{num_groups}</h1>", unsafe_allow_html=True)
+                with col3:
+                    st.markdown(f"<h4 style='text-align: center; background-color: #4682B4; padding: 10px; font-size: 14px; color: white; '> Qtde de Grupos + SubGrupos</h4>", unsafe_allow_html=True)                
+                    st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{num_groups_subgroups}</h1>", unsafe_allow_html=True)
+                with col4:
+                    st.markdown(f"<h4 style='text-align: center; background-color: #ADD8E6; padding: 10px; font-size: 14px; color: white; '> Total Primary Work Seats</h4>", unsafe_allow_html=True)                
+                    st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{total_primary_seats}</h1>", unsafe_allow_html=True)
+                with col5:
+                    st.markdown(f"<h4 style='text-align: center; background-color: #4682B4; padding: 10px; font-size: 14px; color: white; '> Total Seats</h4>", unsafe_allow_html=True)                
+                    st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{total_floor_seats}</h1>", unsafe_allow_html=True)
+
+
+
+                # Adiciona um espaço maior usando <br> no Markdown
+                st.markdown("<br><br><br>", unsafe_allow_html=True)  # Adiciona 3 quebras de linha
+
+
+            #### BIG NUMBERS - CABEÇALHO DONUTS
+                #### 1. HEADCOUNT
+                total_headcount = df_merged_sorted_hc['HeadCount'].sum()
+
+                # 1.1) % Alocados HEADCOUNT
+                allocated_headcount = df_merged_sorted_hc[df_merged_sorted_hc['Building Name'] != 'Não Alocado']['HeadCount'].sum()
+                percent_allocated_hc = (allocated_headcount / total_headcount) * 100 if total_headcount > 0 else 0
+                percent_allocated_hc = percent_allocated_hc.round(0).astype(int)
+
+                # 1.2) Qtde Não Alocados HEADCOUNT
+                non_allocated_headcount = df_merged_sorted_hc[df_merged_sorted_hc['Building Name'] == 'Não Alocado']['HeadCount'].sum()
+                non_allocated_groups_hc = df_merged_sorted_hc[df_merged_sorted_hc['Building Name'] == 'Não Alocado']
+                non_allocated_groups_hc = non_allocated_groups_hc[["Group","SubGroup","HeadCount"]].sort_values(by=["Group","SubGroup"])
+
+                # 1.3 - GRÁFICO DE DONUT - HEADCOUNT
+                df_merged_sorted_hc['Status'] = df_merged_sorted_hc['Building Name'].apply(lambda x: 'Alocado' if x != 'Não Alocado' else 'Não Alocado')
+                # Agrupando o HeadCount por Status
+                headcount_by_status = df_merged_sorted_hc.groupby('Status').agg({'HeadCount': 'sum'}).reset_index()
+                # Criando o gráfico de Donut com Plotly
+                fighc = px.pie(headcount_by_status, 
+                            names='Status', 
+                            values='HeadCount', 
+                            title='',
+                            hole=0.3,  # Cria o efeito de donut
+                            color='Status',
+                            color_discrete_map={"Alocado": "#00CFFF", "Não Alocado": "#FFAA33"},  # Definindo as cores
+                            labels={"HeadCount": "Total HeadCount"})  # Renomeia o label no gráfico
+                # Adicionando os valores absolutos e percentuais como rótulos
+                fighc.update_traces(textinfo='percent+label', pull=[0.1, 0.1])  # Exibindo percentagem e label
+                fighc.update_layout(
+                    title='',  # Título do gráfico
+                    title_x=0,  # Alinha o título à esquerda
+                    title_xanchor='left',  # Alinha o título à esquerda
+                    title_font=dict(size=16, color="black", family="Arial"), 
+                    legend_title="Status",
+                    legend=dict(
+                        x=1.05,  # Posiciona a legenda à direita
+                        y=0.5,   # Ajuste vertical para que a legenda não sobreponha o gráfico
+                        traceorder="normal",  # Ordem de exibição das legendas
+                        orientation="v",  # Define a legenda na vertical
+                        title="Status",
+                    ),
+                    margin=dict(t=50, b=50, l=50, r=50),  # Ajustando as margens do gráfico
+                    plot_bgcolor="white",  # Cor de fundo do gráfico
+                    paper_bgcolor="white",  # Cor de fundo da área do gráfico
+                    width=450,  # Largura reduzida do gráfico
+                    height=450,  # Altura reduzida do gráfico
+                    )
+
+                
+                #### 2 - AVG PEAK            
+                # Merge para unir informações de ocupação por AVG PEAK
+                df_merged_peak = pd.merge(dfautomation_peak_dash, df_building_dash[['Building Name', 'Primary Work Seats', 'Total seats on floor']], on='Building Name', how='left')
+                df_merged_sorted_peak = df_merged_peak.sort_values(by=['Building Name', 'Group', 'SubGroup'])
+                
+                # Calcular o "Proportional Peak Exception" (Exception = Y) diretamente no backend
+                df_merged_sorted_peak['Peak_Exc'] = df_merged_sorted_peak.apply(
+                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'],
+                    axis=1
+                )
+                df_merged_sorted_peak['CumSum Peak_Exc'] = df_merged_sorted_peak.groupby('Building Name')['Peak_Exc'].cumsum()
+                df_merged_sorted_peak['AvailableCumSum'] = df_merged_sorted_peak['Primary Work Seats'] - df_merged_sorted_peak['CumSum Peak_Exc']
+
+                # Lugares Disponíveis por Andar
+                df_last_cumsum_peak = df_merged_sorted_peak.groupby('Building Name').last().reset_index()
+                df_last_cumsum_peak['Avail Total Seats Peak'] = df_last_cumsum_peak['Total seats on floor'] - df_last_cumsum_peak['CumSum Peak_Exc']
+                df_last_cumsum_peak['Avail Primary Peak'] = df_last_cumsum_peak['Primary Work Seats'] - df_last_cumsum_peak['CumSum Peak_Exc']
+                df_availability_peak = df_last_cumsum_peak[['Building Name', 'CumSum Peak_Exc', 'Primary Work Seats', 'Avail Primary Peak', 'Total seats on floor', 'Avail Total Seats Peak']]
+                total_row_peak = df_availability_peak[['CumSum Peak_Exc', 'Primary Work Seats', 'Avail Primary Peak', 'Total seats on floor', 'Avail Total Seats Peak']].sum()
+                total_row_peak['Building Name'] = 'Total'  
+                df_avail_row_peak = pd.DataFrame([total_row_peak])
+                df_avail_peak = pd.concat([df_availability_peak, df_avail_row_peak], ignore_index=True)
+                df_avail_peak.rename(columns={"CumSum Peak_Exc" : "Total Peak"}, inplace=True)
+
+                total_avgpeak = df_merged_sorted_peak['Peak_Exc'].sum()
+
+                # 2.1) % Alocados AVG PEAK
+                allocated_peak = df_merged_sorted_peak[df_merged_sorted_peak['Building Name'] != 'Não Alocado']['Peak_Exc'].sum()
+                percent_allocated_peak = (allocated_peak / total_avgpeak) * 100 if total_avgpeak > 0 else 0
+                percent_allocated_peak = percent_allocated_peak.round(0).astype(int)
+
+                # 2.2) Qtde Não Alocados AVG PEAK
+                non_allocated_peak = df_merged_sorted_peak[df_merged_sorted_peak['Building Name'] == 'Não Alocado']['Peak_Exc'].sum()
+                non_allocated_groups_peak = df_merged_sorted_peak[df_merged_sorted_peak['Building Name'] == 'Não Alocado']
+                non_allocated_groups_peak = non_allocated_groups_peak[["Group", "SubGroup", "Peak_Exc"]].sort_values(by=["Group","SubGroup"])
+
+                # 2.3 - GRÁFICO DE DONUT - AVG PEAK
+                df_merged_sorted_peak['Status'] = df_merged_sorted_peak['Building Name'].apply(lambda x: 'Alocado' if x != 'Não Alocado' else 'Não Alocado')
+                # Agrupando o HeadCount por Status
+                peak_by_status = df_merged_sorted_peak.groupby('Status').agg({'Peak_Exc': 'sum'}).reset_index()
+                # Criando o gráfico de Donut com Plotly
+                figpeak = px.pie(peak_by_status, 
+                            names='Status', 
+                            values='Peak_Exc', 
+                            title='',
+                            hole=0.3,  # Cria o efeito de donut
+                            color='Status',
+                            color_discrete_map={"Alocado": "#00CFFF", "Não Alocado": "#FFAA33"},  # Definindo as cores
+                            labels={"Peak_Exc": "Total Peak Exc"})  # Renomeia o label no gráfico
+                # Adicionando os valores absolutos e percentuais como rótulos
+                figpeak.update_traces(textinfo='percent+label', pull=[0.1, 0.1])  # Exibindo percentagem e label
+                figpeak.update_layout(
+                    title='',  # Título do gráfico
+                    title_x=0,  # Alinha o título à esquerda
+                    title_xanchor='left',  # Alinha o título à esquerda
+                    title_font=dict(size=16, color="black", family="Arial"), 
+                    legend_title="Status",
+                    legend=dict(
+                        x=1.05,  # Posiciona a legenda à direita
+                        y=0.5,   # Ajuste vertical para que a legenda não sobreponha o gráfico
+                        traceorder="normal",  # Ordem de exibição das legendas
+                        orientation="v",  # Define a legenda na vertical
+                        title="Status",
+                    ),
+                    margin=dict(t=50, b=50, l=50, r=50),  # Ajustando as margens do gráfico
+                    plot_bgcolor="white",  # Cor de fundo do gráfico
+                    paper_bgcolor="white",  # Cor de fundo da área do gráfico
+                    width=450,  # Largura reduzida do gráfico
+                    height=450,  # Altura reduzida do gráfico
+                    )
+                
+
+                #### 3 - AVG OCC
+                # Merge para unir informações de ocupação por AVG OCC
+                df_merged_avg = pd.merge(dfautomation_avg_dash, df_building_dash[['Building Name', 'Primary Work Seats','Total seats on floor']], on='Building Name', how='left')
+                df_merged_sorted_avg = df_merged_avg.sort_values(by=['Building Name', 'Group', 'SubGroup'])
+                
+                # Calcular o "Proportional Peak Exception" (Exception = Y) diretamente no backend
+                df_merged_sorted_avg['Avg_Exc'] = df_merged_sorted_avg.apply(
+                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'],
+                    axis=1
+                )
+                df_merged_sorted_avg['CumSum Avg_Exc'] = df_merged_sorted_avg.groupby('Building Name')['Avg_Exc'].cumsum()
+                df_merged_sorted_avg['AvailableCumSum'] = df_merged_sorted_avg['Primary Work Seats'] - df_merged_sorted_avg['CumSum Avg_Exc']
+
+                # Lugares Disponíveis por Andar
+                df_last_cumsum_avgocc = df_merged_sorted_avg.groupby('Building Name').last().reset_index()
+                df_last_cumsum_avgocc['Avail Total Seats AvgOcc'] = df_last_cumsum_avgocc['Total seats on floor'] - df_last_cumsum_avgocc['CumSum Avg_Exc']
+                df_last_cumsum_avgocc['Avail Primary AvgOcc'] = df_last_cumsum_avgocc['Primary Work Seats'] - df_last_cumsum_avgocc['CumSum Avg_Exc']
+                df_availability_avgocc = df_last_cumsum_avgocc[['Building Name', 'CumSum Avg_Exc', 'Primary Work Seats', 'Avail Primary AvgOcc', 'Total seats on floor', 'Avail Total Seats AvgOcc']]
+                total_row_avgocc = df_availability_avgocc[['CumSum Avg_Exc', 'Primary Work Seats', 'Avail Primary AvgOcc', 'Total seats on floor', 'Avail Total Seats AvgOcc']].sum()
+                total_row_avgocc['Building Name'] = 'Total'  
+                df_avail_row_avgocc = pd.DataFrame([total_row_avgocc])
+                df_avail_avgocc = pd.concat([df_availability_avgocc, df_avail_row_avgocc], ignore_index=True)
+                df_avail_avgocc.rename(columns={"CumSum Avg_Exc" : "Total Avg Occ"}, inplace=True)
+                total_avgocc = df_merged_sorted_avg['Avg_Exc'].sum()
+
+                # 3.1) % Alocados AVG OCC
+                allocated_avgocc = df_merged_sorted_avg[df_merged_sorted_avg['Building Name'] != 'Não Alocado']['Avg_Exc'].sum()
+                percent_allocated_avgocc = (allocated_avgocc / total_avgocc) * 100 if total_avgpeak > 0 else 0
+                percent_allocated_avgocc = percent_allocated_avgocc.round(0).astype(int)
+
+                # 3.2) Qtde Não Alocados AVG OCC
+                non_allocated_avgocc = df_merged_sorted_avg[df_merged_sorted_avg['Building Name'] == 'Não Alocado']['Avg_Exc'].sum()
+                non_aloccated_groups_avgocc = df_merged_sorted_avg[df_merged_sorted_avg['Building Name'] == 'Não Alocado']
+                non_aloccated_groups_avgocc = non_aloccated_groups_avgocc[["Group", "SubGroup", "Avg_Exc"]].sort_values(by=["Group", "SubGroup"])
+
+
+                # 3.3 - GRÁFICO DE DONUT - AVG OCC
+                df_merged_sorted_avg['Status'] = df_merged_sorted_avg['Building Name'].apply(lambda x: 'Alocado' if x != 'Não Alocado' else 'Não Alocado')
+                # Agrupando o HeadCount por Status
+                avgocc_by_status = df_merged_sorted_avg.groupby('Status').agg({'Avg_Exc': 'sum'}).reset_index()
+                # Criando o gráfico de Donut com Plotly
+                figavgocc = px.pie(avgocc_by_status, 
+                            names='Status', 
+                            values='Avg_Exc', 
+                            title='',
+                            hole=0.3,  # Cria o efeito de donut
+                            color='Status',
+                            color_discrete_map={"Alocado": "#00CFFF", "Não Alocado": "#FFAA33"},  # Definindo as cores
+                            labels={"Avg_Exc": "Total Avg Exc"})  # Renomeia o label no gráfico
+                # Adicionando os valores absolutos e percentuais como rótulos
+                figavgocc.update_traces(textinfo='percent+label', pull=[0.1, 0.1])  # Exibindo percentagem e label
+                figavgocc.update_layout(
+                    title='',  # Título do gráfico
+                    title_x=0,  # Alinha o título à esquerda
+                    title_xanchor='left',  # Alinha o título à esquerda
+                    title_font=dict(size=16, color="black", family="Arial"), 
+                    legend_title="Status",
+                    legend=dict(
+                        x=1.05,  # Posiciona a legenda à direita
+                        y=0.5,   # Ajuste vertical para que a legenda não sobreponha o gráfico
+                        traceorder="normal",  # Ordem de exibição das legendas
+                        orientation="v",  # Define a legenda na vertical
+                        title="Status",
+                    ),
+                    margin=dict(t=50, b=50, l=50, r=50),  # Ajustando as margens do gráfico
+                    plot_bgcolor="white",  # Cor de fundo do gráfico
+                    paper_bgcolor="white",  # Cor de fundo da área do gráfico
+                    width=450,  # Largura reduzida do gráfico
+                    height=450,  # Altura reduzida do gráfico
+                    )
+                
+            #### EXIBIÇÃO 
+                col5, col6, col7,   = st.columns(3)
+
+                with col5:
+                    st.markdown(f"<h4 style='text-align: center; background-color: #707070; padding: 10px; font-size: 16px; color: white; '> Automação HeadCount</h4>", unsafe_allow_html=True)
+                with col6:
+                    st.markdown(f"<h4 style='text-align: center; background-color: #B0B0B0; padding: 10px; font-size: 16px; color: white; '> Automação Avg Peak</h4>", unsafe_allow_html=True) 
+                with col7:
+                    st.markdown(f"<h4 style='text-align: center; background-color: #707070; padding: 10px; font-size: 16px; color: white; '>  Automação Avg Occ</h4>", unsafe_allow_html=True) 
+
+
+                # Adiciona um espaço maior usando <br> no Markdown
+                st.markdown("<br>", unsafe_allow_html=True)  # Adiciona 3 quebras de linha
+
+               
+                col8, col9, col10,   = st.columns(3)
+                with col8:
+                    st.dataframe(df_avail_hc, use_container_width=False, hide_index=True)
+                    st.plotly_chart(fighc)        
+                    st.write("Groups e SubGroups não alocados")            
+                    st.dataframe(non_allocated_groups_hc, use_container_width=False,hide_index=True)
+
+                with col9:
+                    st.dataframe(df_avail_peak, use_container_width=False, hide_index=True)
+                    st.plotly_chart(figpeak)
+                    st.write("Groups e SubGroups não alocados") 
+                    st.dataframe(non_allocated_groups_peak, use_container_width=False, hide_index=True)
+
+                with col10:
+                    st.dataframe(df_avail_avgocc, use_container_width=False, hide_index=True)
+                    st.plotly_chart(figavgocc)
+                    st.write("Groups e SubGroups não alocados") 
+                    st.dataframe(non_aloccated_groups_avgocc, use_container_width=False, hide_index=True)
+
+
+
+
+
+                # Adiciona um espaço maior usando <br> no Markdown
+                st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
+
+
+            #### DROPBOX PARA DEEP DIVE
+                # Adicionar um seletor para o usuário escolher qual tabela exibir
+                tabela_selecionada = st.selectbox(
+                    'Escolha a tabela para visualizar:',
+                    ('Automação HeadCount', 'Automação Peak', 'Automação AvgOcc' )
+                )
+
+
+                #### HEADCOUNT
+                if tabela_selecionada == "Automação HeadCount":
+
+                #### GRÁFICO DE AVG E PEAK
+                    # Calculando os totais para cada grupo
+                    df_grouped = df_merged_sorted_hc.groupby('Group').agg({
+                        'HeadCount': 'sum',                # Soma o total de HeadCount por Group
+                        'Proportional Peak': 'sum',        # Soma o Proportional Peak por Group
+                        'Proportional Avg': 'sum'          # Soma o Proportional Avg por Group
+                    }).reset_index()
+
+                    # Calculando os percentuais
+                    df_grouped['Total Peak'] = (df_grouped['Proportional Peak'] / df_grouped['HeadCount']) * 100
+                    df_grouped['Total Avg'] = (df_grouped['Proportional Avg'] / df_grouped['HeadCount']) * 100
+
+                    # Reformulando para ter os cálculos em linhas
+                    df_melted = df_grouped.melt(id_vars=['Group'], value_vars=['Total Peak', 'Total Avg'], 
+                                                var_name='CalculationType', value_name='Percentage')
+
+                    # Criando as colunas de texto específicas para cada tipo de cálculo
+                    df_melted['text'] = df_melted.apply(
+                        lambda row: f"<b>{row['CalculationType']}:</b> {row['Percentage']:.1f}%" if row['Percentage'] > 0 else "", axis=1
+                    )
+
+                    # Criando o gráfico de barras
+                    fig = px.bar(df_melted, 
+                                x="Group", 
+                                y="Percentage", 
+                                color="CalculationType",  # Diferencia as barras pelo tipo de cálculo
+                                title="Distribuição do Percentual de HeadCount por Group",
+                                labels={"Percentage": "Percentual (%)", "Group": "Group", "CalculationType": "Cálculo"},
+                                color_discrete_map={"Total Peak": "#006400", "Total Avg": "#32CD32"},  # Verde escuro e verde claro
+                                text="text"  # Usando a coluna de texto específica para cada barra
+                                )
+
+                    # Habilitando interatividade no gráfico
+                    fig.update_layout(
+                        barmode='group',  # Barra agrupada (2 barras por grupo)
+                        xaxis_title="Group",
+                        yaxis_title="Percentual (%)",
+                        yaxis=dict(range=[0, 100]),  # Fixando o limite do eixo Y em 100%
+                        legend_title="Tipo de Percentual",
+                        legend=dict(
+                            x=1.05,  # Posiciona a legenda à direita
+                            y=0.5,   # Ajuste vertical para que a legenda não sobreponha o gráfico
+                            traceorder="normal",  # Ordem de exibição das legendas
+                            orientation="v",  # Define a legenda na vertical
+                            title="Group"
+                        ),
+                        margin=dict(t=50, b=50, l=50, r=50),  # Ajustando as margens do gráfico
+                        plot_bgcolor="white",  # Cor de fundo do gráfico
+                        paper_bgcolor="white",  # Cor de fundo da área do gráfico
+                        width=800,  # Largura do gráfico
+                        height=450,  # Altura do gráfico
+                    )
+
+                    # Adicionando os valores nas barras com texto HTML
+                    fig.update_traces(texttemplate='%{text}', textposition='inside')  # Exibe o texto dentro das barras
+
+                    # Exibe o gráfico no Streamlit
+                    st.plotly_chart(fig)
+
+                    # Adiciona um espaço maior usando <br> no Markdown
+                    st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
+
+
+                #### DATAFRAME HEADCOUNT + DONUT POR GROUP     
+                    colhc1, colhc2 = st.columns(2)
+                    with colhc1:
+                        # Agrupando os dados e somando o HeadCount por Group
+                        df_dash_hc = df_merged_sorted_hc[["Group", "SubGroup", "HeadCount","Proportional Peak", "Proportional Avg"]].copy()
+                        df_grouped_hc = df_dash_hc.groupby('Group', as_index=False)['HeadCount'].sum()
+                        figdonuthc = px.pie(df_grouped_hc, 
+                                    names='Group', 
+                                    values='HeadCount', 
+                                    hole=0.3,  # Faz o gráfico ficar no formato de rosca
+                                    title="Distribuição de HeadCount por Group")
+
+                        # Exibindo o gráfico no Streamlit
+                        st.plotly_chart(figdonuthc)
+
+                    with colhc2:
+                        df_dash_hc.rename(columns={"Proportional Peak" : "Peak Seats Required", "Proportional Avg" : "Avg Seats Required"}, inplace=True)
+                        st.dataframe(df_dash_hc, use_container_width=False, hide_index=True)
+
+                    
+                    # Adiciona um espaço maior usando <br> no Markdown
+                    st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
+                        
+
+                    #### GRÁFICO DE BARRAS - DISTRIBUIÇÃO DE HEADCOUNT POR ANDAR
+                    colalochc1, colalochc2 = st.columns(2)
+
+                    with colalochc1:
+                        # Criando o gráfico de barras
+                        df_merged_sorted_hc_bars = df_merged_sorted_hc.groupby(['Building Name', 'Group'], as_index=False)['HeadCount'].sum()
+                        barshc = px.bar(df_merged_sorted_hc_bars, 
+                                        x="Group", 
+                                        y="HeadCount", 
+                                        color="Building Name", 
+                                        title="Distribuição de HeadCount por Alocação", 
+                                        labels={"HeadCount": "Total HeadCount"},
+                                        hover_data=["Building Name"],  # Exibe SubGroup ao passar o mouse
+                                        category_orders={"Building Name": df_merged_hc['Building Name'].unique()})  # Exibe todos os Buildings disponíveis
+
+                        # Adicionando os valores nas barras com texto
+                        barshc.update_traces(text=df_merged_sorted_hc_bars['HeadCount'], textposition='inside', texttemplate='%{text}')
+
+                        # Habilitando interatividade no gráfico
+                        barshc.update_layout(
+                            barmode='stack',  # Empilha as barras por SubGroup
+                            xaxis_title="Group",
+                            yaxis_title="Total HeadCount",
+                            legend_title="Building Name",
+                            legend=dict(
+                                x=1.05,  # Posiciona a legenda à direita
+                                y=0.5,   # Ajuste vertical para que a legenda não sobreponha o gráfico
+                                traceorder="normal",  # Ordem de exibição das legendas
+                                orientation="v",  # Define a legenda na vertical
+                                title="Group"
+                            ),
+                            margin=dict(t=50, b=50, l=50, r=50),  # Ajustando as margens do gráfico
+                            plot_bgcolor="white",  # Cor de fundo do gráfico
+                            paper_bgcolor="white",  # Cor de fundo da área do gráfico
+                            width=800,  # Largura reduzida do gráfico
+                            height=550,  # Altura reduzida do gráfico
+                        )
+
+                        # Exibindo o gráfico no Streamlit
+                        st.plotly_chart(barshc)
+
+
+                    with colalochc2:
+                        df_dash_aloc_hc = df_merged_sorted_hc[["Group", "SubGroup", "HeadCount","Proportional Peak", "Proportional Avg", "Building Name"]].copy()
+                        df_dash_aloc_hc.rename(columns={"Proportional Peak" : "Peak Seats Required", "Proportional Avg" : "Avg Seats Required"}, inplace=True)
+                        st.dataframe(df_dash_aloc_hc, use_container_width=False, hide_index=True)
+
+
+
+            if visao_selecionada == 'Cenarios':
+                if "final_consolidated_df" in st.session_state and not st.session_state.final_consolidated_df.empty:
+                    final_consolidated_drop = st.session_state.final_consolidated_df.copy()
+                    colunas_para_remover = ['Origem', 'Chave']
+                    final_consolidated_dash = final_consolidated_drop.drop(columns=colunas_para_remover, errors='ignore')
+                    st.session_state.final_consolidated_dash = final_consolidated_drop
+
+
+                    # Merge para unir informações de ocupação por HEADCOUNT
+                    df_merged_cenarios = pd.merge(final_consolidated_dash, df_building_dash[['Building Name', 'Primary Work Seats', 'Total seats on floor']], on='Building Name', how='left')
+                    df_merged_cenarios = df_merged_cenarios.sort_values(by=['Building Name', 'Group', 'SubGroup'])
+                    df_merged_cenarios['CumSum HeadCount'] = df_merged_cenarios.groupby('Building Name')['1:1'].cumsum()
+                    df_merged_cenarios['AvailableCumSum'] = df_merged_cenarios['Primary Work Seats'] - df_merged_cenarios['CumSum HeadCount']
+
+                    # Lugares Disponíveis por Andar
+                    df_last_cumsum_cenarios = df_merged_cenarios.groupby('Building Name').last().reset_index()
+                    df_last_cumsum_cenarios['Avail Total Seats HC'] = df_last_cumsum_cenarios['Total seats on floor'] - df_last_cumsum_cenarios['CumSum HeadCount']
+                    df_last_cumsum_cenarios['Avail Primary HC'] = df_last_cumsum_cenarios['Primary Work Seats'] - df_last_cumsum_cenarios['CumSum HeadCount']
+                    df_availability_cenarios = df_last_cumsum_cenarios[['Building Name', 'CumSum HeadCount', 'Primary Work Seats', 'Avail Primary HC', 'Total seats on floor',  'Avail Total Seats HC']]
+                    total_row_cenarios = df_availability_cenarios[['CumSum HeadCount', 'Primary Work Seats', 'Avail Primary HC', 'Total seats on floor',  'Avail Total Seats HC']].sum()
+                    total_row_cenarios['Building Name'] = 'Total'  
+                    df_avail_row_cenarios = pd.DataFrame([total_row_cenarios])
+                    df_avail_cenarios = pd.concat([df_availability_cenarios, df_avail_row_cenarios], ignore_index=True)
+                    df_avail_row_cenarios.rename(columns={"CumSum HeadCoun" : "Total HC"})
+
+                #### BIG NUMBERS - CABEÇALHO PAINEL
+                    # Calculando as métricas
+                    # 1) Qtde de Buildings
+                    num_buildings = df_building_dash['Building Name'].nunique()
+
+                    # 2) Qtde de Groups
+                    num_groups = df_merged_cenarios['Group'].nunique()
+
+                    # 3) Qtde de Groups + SubGroups
+                    num_groups_subgroups = df_merged_cenarios[['Group', 'SubGroup']].drop_duplicates().shape[0]
+
+                    # 4) Total de Lugares Disponíveis (Primary Work Seats)
+                    total_primary_seats = df_building_dash['Primary Work Seats'].sum()
+
+                    # 5) Total de Lugares Disponíveis (Total Seats on Floor)
+                    total_floor_seats = df_building_dash['Total seats on floor'].sum()
+
+                    # Organizando os Big Numbers em colunas
+                    col1, col2, col3, col4, col5  = st.columns(5)  
+
+                    with col1:
+                        # Título com fonte e alinhamento
+                        st.markdown(f"<h4 style='text-align: center; background-color: #4682B4; padding: 10px; font-size: 16px; color: white; '> Qtde de Andares</h4>", unsafe_allow_html=True)                
+                        # Número com fonte personalizada e centralizado
+                        st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{num_buildings}</h1>", unsafe_allow_html=True)
+                    with col2:
+                        st.markdown(f"<h4 style='text-align: center; background-color: #ADD8E6; padding: 10px; font-size: 16px;'> Qtde de Grupos</h4>", unsafe_allow_html=True) 
+                        st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{num_groups}</h1>", unsafe_allow_html=True)
+                    with col3:
+                        st.markdown(f"<h4 style='text-align: center; background-color: #4682B4; padding: 10px; font-size: 14px; color: white; '> Qtde de Grupos + SubGrupos</h4>", unsafe_allow_html=True)                
+                        st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{num_groups_subgroups}</h1>", unsafe_allow_html=True)
+                    with col4:
+                        st.markdown(f"<h4 style='text-align: center; background-color: #ADD8E6; padding: 10px; font-size: 14px; color: white; '> Total Primary Work Seats</h4>", unsafe_allow_html=True)                
+                        st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{total_primary_seats}</h1>", unsafe_allow_html=True)
+                    with col5:
+                        st.markdown(f"<h4 style='text-align: center; background-color: #4682B4; padding: 10px; font-size: 14px; color: white; '> Total Seats</h4>", unsafe_allow_html=True)                
+                        st.markdown(f"<h1 style='text-align: center; font-size: 28px; font-family: Arial, sans-serif; font-weight: bold;'>{total_floor_seats}</h1>", unsafe_allow_html=True)
+
+
+
+                    # Adiciona um espaço maior usando <br> no Markdown
+                    st.markdown("<br><br><br>", unsafe_allow_html=True)  # Adiciona 3 quebras de linha
+
+                
+
+
+                #### GRÁFICO DE AVG E PEAK
+                    # Calculando os totais para cada grupo
+                    df_grouped = final_consolidated_dash.groupby('Group').agg({
+                        '1:1': 'sum',             # Soma o total de HeadCount por Group
+                        'Peak': 'sum',            # Soma o Proportional Peak por Group
+                        'Avg Occ': 'sum'          # Soma o Proportional Avg por Group
+                    }).reset_index()
+
+                    # Calculando os percentuais
+                    df_grouped['Total Peak'] = (df_grouped['Peak'] / df_grouped['1:1']) * 100
+                    df_grouped['Total Avg'] = (df_grouped['Avg Occ'] / df_grouped['1:1']) * 100
+
+                    # Reformulando para ter os cálculos em linhas
+                    df_melted = df_grouped.melt(id_vars=['Group'], value_vars=['Total Peak', 'Total Avg'], 
+                                                var_name='CalculationType', value_name='Percentage')
+
+                    # Criando as colunas de texto específicas para cada tipo de cálculo
+                    df_melted['text'] = df_melted.apply(
+                        lambda row: f"<b>{row['CalculationType']}:</b> {row['Percentage']:.1f}%" if row['Percentage'] > 0 else "", axis=1
+                    )
+
+                    # Criando o gráfico de barras
+                    fig = px.bar(df_melted, 
+                                x="Group", 
+                                y="Percentage", 
+                                color="CalculationType",  # Diferencia as barras pelo tipo de cálculo
+                                title="Distribuição do Percentual de HeadCount por Group",
+                                labels={"Percentage": "Percentual (%)", "Group": "Group", "CalculationType": "Cálculo"},
+                                color_discrete_map={"Total Peak": "#006400", "Total Avg": "#32CD32"},  # Verde escuro e verde claro
+                                text="text"  # Usando a coluna de texto específica para cada barra
+                                )
+
+                    # Habilitando interatividade no gráfico
+                    fig.update_layout(
+                        barmode='group',  # Barra agrupada (2 barras por grupo)
+                        xaxis_title="Group",
+                        yaxis_title="Percentual (%)",
+                        yaxis=dict(range=[0, 100]),  # Fixando o limite do eixo Y em 100%
+                        legend_title="Tipo de Percentual",
+                        legend=dict(
+                            x=1.05,  # Posiciona a legenda à direita
+                            y=0.5,   # Ajuste vertical para que a legenda não sobreponha o gráfico
+                            traceorder="normal",  # Ordem de exibição das legendas
+                            orientation="v",  # Define a legenda na vertical
+                            title="Group"
+                        ),
+                        margin=dict(t=50, b=50, l=50, r=50),  # Ajustando as margens do gráfico
+                        plot_bgcolor="white",  # Cor de fundo do gráfico
+                        paper_bgcolor="white",  # Cor de fundo da área do gráfico
+                        width=800,  # Largura do gráfico
+                        height=450,  # Altura do gráfico
+                    )
+
+                    # Adicionando os valores nas barras com texto HTML
+                    fig.update_traces(texttemplate='%{text}', textposition='inside')  # Exibe o texto dentro das barras
+
+                    # Exibe o gráfico no Streamlit
+                    st.plotly_chart(fig)
+
+                    # Adiciona um espaço maior usando <br> no Markdown
+                    st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
+
+                    
+                #### GRÁFICO DE BARRAS - DISTRIBUIÇÃO DE HEADCOUNT POR ANDAR
+                    colalochc1, colalochc2 = st.columns(2)
+
+                    with colalochc1:
+                        # Criando o gráfico de barras
+                        final_consolidated_dash_bars = final_consolidated_dash.groupby(['Building Name', 'Group'], as_index=False)['1:1'].sum()
+                        barscenarios = px.bar(final_consolidated_dash_bars, 
+                                        x="Group", 
+                                        y="1:1", 
+                                        color="Building Name", 
+                                        title="Distribuição de HeadCount por Alocação", 
+                                        labels={"1:1": "Total HeadCount"},
+                                        hover_data=["Building Name"],  # Exibe SubGroup ao passar o mouse
+                                        category_orders={"Building Name": final_consolidated_dash_bars['Building Name'].unique()})  # Exibe todos os Buildings disponíveis
+
+                        # Adicionando os valores nas barras com texto
+                        barscenarios.update_traces(text=final_consolidated_dash_bars['1:1'], textposition='inside', texttemplate='%{text}')
+
+                        # Habilitando interatividade no gráfico
+                        barscenarios.update_layout(
+                            barmode='stack',  # Empilha as barras por SubGroup
+                            xaxis_title="Group",
+                            yaxis_title="Total HeadCount",
+                            legend_title="Building Name",
+                            legend=dict(
+                                x=1.05,  # Posiciona a legenda à direita
+                                y=0.5,   # Ajuste vertical para que a legenda não sobreponha o gráfico
+                                traceorder="normal",  # Ordem de exibição das legendas
+                                orientation="v",  # Define a legenda na vertical
+                                title="Group"
+                            ),
+                            margin=dict(t=50, b=50, l=50, r=50),  # Ajustando as margens do gráfico
+                            plot_bgcolor="white",  # Cor de fundo do gráfico
+                            paper_bgcolor="white",  # Cor de fundo da área do gráfico
+                            width=800,  # Largura reduzida do gráfico
+                            height=550,  # Altura reduzida do gráfico
+                        )
+
+                        # Exibindo o gráfico no Streamlit
+                        st.plotly_chart(barscenarios)
+
+
+                    with colalochc2:
+                        final_consolidated_dash_cenarios = final_consolidated_dash[["Group", "SubGroup", "1:1","Peak", "Avg Occ", "Building Name"]].copy()
+                        final_consolidated_dash_cenarios.rename(columns={"Peak" : "Peak Seats Required", "Avg Occ" : "Avg Seats Required"}, inplace=True)
+                        st.dataframe(final_consolidated_dash_cenarios, use_container_width=False, hide_index=True)
+
+
+                    
+                    # Adiciona um espaço maior usando <br> no Markdown
+                    st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
+
+                    st.write("**Tabela Completa de Cenários:**")
+                    st.dataframe(st.session_state.final_consolidated_dash, use_container_width=True, hide_index=True)
+
+
+                else:
+                    st.warning("Nenhum dado consolidado disponível. Grave os dados primeiro.")                            
+
+        else:
+            st.write("Nenhuma tabela disponível para exibição.")
  
 
 # Tela Inicial com Seleção
@@ -1047,6 +1776,3 @@ opcao = st.selectbox("Escolha uma opção", ["Selecione", "Upload de Arquivo"])
 
 if opcao == "Upload de Arquivo":
     upload_arquivo()
-
-
-
