@@ -4,3 +4,7 @@ pandas
 numpy
 openpyxl
 xlsxwriter
+itertools
+matplotlib
+plotly
+seaborn
