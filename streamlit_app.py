@@ -291,13 +291,10 @@ def upload_arquivo():
 
 
 
-   ##### ABA AUTOMAÇÃO #####
+    ##### ABA AUTOMAÇÃO #####
     with tabs[2]:
         st.header("Automação")
-        st.write("""
-            Para o cálculo de espaços está sendo considerado 'Primary Work Seats'.   
-            As colunas de 'Proportional' são cálculos proporcionais baseado no Total de HeadCount por Grupo / HeadCount por SubGroup - uma vez que a aba 'Staff Occupancy' é por Group.
-            """)
+        st.write("Para o cálculo de espaços está sendo considerado 'Primary Work Seats'.")
 
         # Inicializar df_proportional como um DataFrame vazio, se não houver dados na sessão
         if "df_building_trat" not in st.session_state and "df_proportional" not in st.session_state:
@@ -323,6 +320,7 @@ def upload_arquivo():
                     numeric_columns_building = df_building_trat.select_dtypes(include=['number']).columns
                     df_building_trat_total.loc['Total', 'Building Name'] = 'Total'
                     df_building_trat_total.loc['Total', numeric_columns_building] = df_building_trat_total[numeric_columns_building].sum()
+
                     st.dataframe(df_building_trat_total.fillna(""), use_container_width=False, hide_index=True)
 
                     # Exibindo a Tabela 'Grupos, SubGrupos e Adjacentes' com a linha de total
@@ -337,6 +335,12 @@ def upload_arquivo():
 
 
             with st.expander("### Automação considerando HeadCount"):
+                primary_work_seats = df_building_trat_total['Primary Work Seats'].iloc[-1].astype(int)
+                total_seats_on_floor = df_building_trat_total['Total seats on floor'].iloc[-1].astype(int)
+                total_headcount = df_proportional["HeadCount"].sum()
+                    
+                st.write(f"**Primary Work Seats**: {primary_work_seats} || **Total seats on floor**: {total_seats_on_floor}")
+                st.write(f"**Total HeadCount**: {total_headcount}")
 
                 # Função de alocação dos grupos nos andares
                 def allocate_groups(df_proportional, floors):
@@ -386,6 +390,9 @@ def upload_arquivo():
                     remaining_floors_df = pd.DataFrame(list(remaining_floors.items()), columns=['Building Name', 'Remaining Seats'])
                     st.dataframe(remaining_floors_df, use_container_width=False)
 
+                    # Retornar o DataFrame modificado
+                    return df_allocation, remaining_floors_df
+
                 # Carregar os dados e realizar a alocação
                 if "df_building_trat" in st.session_state and "df_proportional" in st.session_state:
                     df_building_trat = st.session_state.df_building_trat
@@ -405,7 +412,19 @@ def upload_arquivo():
                     df_allocation, remaining_floors = allocate_groups(df_proportional, floors.copy())
 
                     # Exibir os resultados de alocação
-                    display_allocation(df_allocation, remaining_floors, df_building_trat)
+                    df_allocation_result, remaining_floors_df_result = display_allocation(df_allocation, remaining_floors, df_building_trat)
+                    dfautomation_hc = df_allocation.copy()
+                    st.session_state.dfautomation_hc = dfautomation_hc  # Salvando no session_state
+
+                    st.write("#### Grupos Não Alocados:")
+                    df_hc_nonallocated = df_allocation_result[df_allocation_result['Building Name'] == 'Não Alocado']
+                    numeric_columns = df_hc_nonallocated.select_dtypes(include='number').columns
+                    total_row = df_hc_nonallocated[numeric_columns].sum()
+                    total_row['Group'] = 'Total' 
+                    total_row_df = pd.DataFrame([total_row])
+                    df_hc_nonallocated_with_total = pd.concat([df_hc_nonallocated, total_row_df], ignore_index=True)
+                    st.dataframe(df_hc_nonallocated_with_total, use_container_width=False)
+
 
                 # Botão para exportar tabela "Building" para Excel
                 if st.button("Exportar 'Automação HeadCount' para Excel", key="export_automacao_hc"):
@@ -424,6 +443,23 @@ def upload_arquivo():
 
             with st.expander("### Automação considerando Peak"):
                 st.write("Para os Groups + SubGroups que são 'Exception = Y' o valor considerado é Headcount - 1:1.")
+
+                primary_work_seats = df_building_trat_total['Primary Work Seats'].iloc[-1].astype(int)
+                total_seats_on_floor = df_building_trat_total['Total seats on floor'].iloc[-1].astype(int)
+                total_proppeak = df_proportional["Proportional Peak"].sum()
+                    
+                st.write(f"**Primary Work Seats**: {primary_work_seats} || **Total seats on floor**: {total_seats_on_floor}")
+
+                # Calcular o "Proportional Peak Exception" (Exception = Y) diretamente no backend
+                total_proportional_Peak_exception = df_proportional.apply(
+                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'],
+                    axis=1
+                ).sum()
+
+                # Exibir o valor total
+                st.write(f"**Total Avg Peak**: {total_proppeak} || **Total Avg Peak Exception**: {total_proportional_Peak_exception}")
+
+
                 def allocate_groups_peak(df_proportional, floors):
                     allocation = {}  # Armazenar a alocação de grupos por andar
                     remaining_groups = df_proportional.sort_values(by='HeadCount', ascending=False)  # Ordenar por HeadCount
@@ -479,6 +515,9 @@ def upload_arquivo():
                     remaining_floors_df = pd.DataFrame(list(remaining_floors.items()), columns=['Building Name', 'Remaining Seats'])
                     st.dataframe(remaining_floors_df, use_container_width=False)
 
+                    # Retornar o DataFrame modificado
+                    return df_allocation, remaining_floors_df
+
                 # Carregar os dados e realizar a alocação
                 if "df_building_trat" in st.session_state and "df_proportional" in st.session_state:
                     df_building_trat = st.session_state.df_building_trat
@@ -498,7 +537,25 @@ def upload_arquivo():
                     df_allocation, remaining_floors = allocate_groups_peak(df_proportional, floors.copy())
 
                     # Exibir os resultados de alocação
-                    display_allocation(df_allocation, remaining_floors, df_building_trat)
+                    df_allocation, remaining_floors_df = display_allocation(df_allocation, remaining_floors, df_building_trat)
+                    dfautomation_peak = df_allocation.copy()
+                    st.session_state.dfautomation_peak = dfautomation_peak  # Salvando no session_state
+
+                    st.write("### Grupos Não Alocados:")
+                    df_peak_nonallocated = df_allocation[df_allocation['Building Name'] == 'Não Alocado']
+                    df_peak_nonallocated['Peak_Exception'] = df_peak_nonallocated.apply(
+                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'],
+                    axis=1
+                    )
+
+                    numeric_columns = df_peak_nonallocated.select_dtypes(include='number').columns
+                    total_row = df_peak_nonallocated[numeric_columns].sum()
+                    total_row['Group'] = 'Total' 
+                    total_row_df = pd.DataFrame([total_row])
+                    df_peak_nonallocated_total = pd.concat([df_peak_nonallocated, total_row_df], ignore_index=True)
+                    st.dataframe(df_peak_nonallocated_total, use_container_width=False)
+
+
 
                 # Botão para exportar tabela "Building" para Excel
                 if st.button("Exportar 'Automação Peak' para Excel", key="export_automacao_peak"):
@@ -508,7 +565,7 @@ def upload_arquivo():
                             df_allocation_export = df_allocation.fillna("")                        
                             df_allocation_export.to_excel(writer, sheet_name="Automacao_Peak", index=False)
                         st.download_button(
-                            label="Download do Excel - Automação HeadCount",
+                            label="Download do Excel - Automação Peak",
                             data=output.getvalue(),
                             file_name="Automacao_Peak.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -518,6 +575,22 @@ def upload_arquivo():
 
             with st.expander("### Automação considerando Avg Occ"):
                 st.write("Para os Groups + SubGroups que são 'Exception = Y' o valor considerado é Headcount - 1:1.")
+
+                primary_work_seats = df_building_trat_total['Primary Work Seats'].iloc[-1].astype(int)
+                total_seats_on_floor = df_building_trat_total['Total seats on floor'].iloc[-1].astype(int)
+                total_propavg = df_proportional["Proportional Avg"].sum()
+                    
+                st.write(f"**Primary Work Seats**: {primary_work_seats} || **Total seats on floor**: {total_seats_on_floor}")
+
+                # Calcular o "Proportional Avg Exception" (Exception = Y) diretamente no backend
+                total_proportional_Avg_exception = df_proportional.apply(
+                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'],
+                    axis=1
+                ).sum()
+
+                # Exibir o valor total
+                st.write(f"**Total Avg**: {total_propavg} || **Total Avg Exception**: {total_proportional_Avg_exception}")
+
                 
                 def allocate_groups_avg(df_proportional, floors):
                     allocation = {}  # Armazenar a alocação de grupos por andar
@@ -574,6 +647,8 @@ def upload_arquivo():
                     remaining_floors_df = pd.DataFrame(list(remaining_floors.items()), columns=['Building Name', 'Remaining Seats'])
                     st.dataframe(remaining_floors_df, use_container_width=False)
 
+                    return df_allocation, remaining_floors_df
+
                 # Carregar os dados e realizar a alocação
                 if "df_building_trat" in st.session_state and "df_proportional" in st.session_state:
                     df_building_trat = st.session_state.df_building_trat
@@ -593,23 +668,39 @@ def upload_arquivo():
                     df_allocation, remaining_floors = allocate_groups_avg(df_proportional, floors.copy())
 
                     # Exibir os resultados de alocação
-                    display_allocation(df_allocation, remaining_floors, df_building_trat)
+                    df_allocation, remaining_floors_df = display_allocation(df_allocation, remaining_floors, df_building_trat)
+                    dfautomation_avg = df_allocation.copy()
+                    st.session_state.dfautomation_avg = dfautomation_avg  # Salvando no session_state
+
+                    st.write("### Grupos Não Alocados:")
+                    df_avg_nonallocated = df_allocation[df_allocation['Building Name'] == 'Não Alocado']
+                    df_avg_nonallocated['Avg_Exception'] = df_avg_nonallocated.apply(
+                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'],
+                    axis=1
+                    )
+
+                    numeric_columns = df_avg_nonallocated.select_dtypes(include='number').columns
+                    total_row = df_avg_nonallocated[numeric_columns].sum()
+                    total_row['Group'] = 'Total' 
+                    total_row_df = pd.DataFrame([total_row])
+                    df_avg_nonallocated_total = pd.concat([df_avg_nonallocated, total_row_df], ignore_index=True)
+                    st.dataframe(df_avg_nonallocated_total, use_container_width=False)
 
                 # Botão para exportar tabela "Building" para Excel
-                if st.button("Exportar 'Automação Peak' para Excel", key="export_automacao_avg"):
+                if st.button("Exportar 'Automação Avg' para Excel", key="export_automacao_avg"):
                     with io.BytesIO() as output:
                         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
                             df_allocation = st.session_state.df_allocation
                             df_allocation_export = df_allocation.fillna("")                        
                             df_allocation_export.to_excel(writer, sheet_name="Automacao_Avg", index=False)
                         st.download_button(
-                            label="Download do Excel - Automação HeadCount",
+                            label="Download do Excel - Automação Avg",
                             data=output.getvalue(),
                             file_name="Automacao_Avg.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
         else:
-            st.write("Por favor, carregue o arquivo para prosseguir.")  
+            st.write("Por favor, carregue o arquivo para prosseguir.") 
 
 
 
