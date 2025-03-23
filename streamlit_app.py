@@ -1030,8 +1030,8 @@ def upload_arquivo():
                         else:
                             st.error("Data not found: 'final_consolidated_df' não está disponível no session_state.")
 
-                else:
-                    st.write("Nenhum dado foi gravado ainda.")
+            else:
+                st.write("Nenhum dado foi gravado ainda.")
 
 
 
