@@ -570,24 +570,25 @@ def upload_arquivo():
 
                 # Botão para exportar tabela "Resultados das Simulações" para Excel
                 if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado_peak"):
-                    # Garantir que dfautomation_hc está salvo no session_state
-                    df_allocation_export = st.session_state.dfautomation_peak.fillna("")  # Acesso correto ao df_allocation salvo no session_state
-                    
-                    # Criar o arquivo Excel em memória
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                        df_allocation_export.to_excel(writer, sheet_name="Simulações Peak", index=False)
-                    
-                    # Definir a posição do ponteiro para o início
-                    output.seek(0)
-                    
-                    # Adicionar botão de download
-                    st.download_button(
-                        label="Download do Excel - Resultados das Simulações Peak",
-                        data=output,
-                        file_name="resultados_simulacoes_peak.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                    if "dfautomation_hc" in st.session_state:
+                        # Acessa o DataFrame salvo no session_state e substitui NaN por string vazia
+                        df_allocation_export = st.session_state.dfautomation_peak.fillna("")
+                        
+                        # Cria o arquivo Excel em memória
+                        output = io.BytesIO()
+                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                            df_allocation_export.to_excel(writer, sheet_name="Simulações PEAK", index=False)
+                        output.seek(0)
+                        
+                        # Botão de download, utilizando output.getvalue() para retornar os bytes do arquivo
+                        st.download_button(
+                            label="Download do Excel - Resultados das Simulações Peak",
+                            data=output.getvalue(),
+                            file_name="resultados_simulacoes_peak.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    else:
+                        st.error("Data not found: 'dfautomation_hc' não está disponível no session_state.")
 
 
 
@@ -706,24 +707,25 @@ def upload_arquivo():
 
                 # Botão para exportar tabela "Resultados das Simulações" para Excel
                 if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado_avgocc"):
-                    # Garantir que dfautomation_hc está salvo no session_state
-                    df_allocation_export = st.session_state.dfautomation_avg.fillna("")  # Acesso correto ao df_allocation salvo no session_state
-                    
-                    # Criar o arquivo Excel em memória
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                        df_allocation_export.to_excel(writer, sheet_name="Simulações Avg Occ", index=False)
-                    
-                    # Definir a posição do ponteiro para o início
-                    output.seek(0)
-                    
-                    # Adicionar botão de download
-                    st.download_button(
-                        label="Download do Excel - Resultados das Simulações Avg Occ",
-                        data=output,
-                        file_name="resultados_simulacoes_avgocc.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                    if "dfautomation_hc" in st.session_state:
+                        # Acessa o DataFrame salvo no session_state e substitui NaN por string vazia
+                        df_allocation_export = st.session_state.dfautomation_avg.fillna("")
+                        
+                        # Cria o arquivo Excel em memória
+                        output = io.BytesIO()
+                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                            df_allocation_export.to_excel(writer, sheet_name="Simulações Avg OCC", index=False)
+                        output.seek(0)
+                        
+                        # Botão de download, utilizando output.getvalue() para retornar os bytes do arquivo
+                        st.download_button(
+                            label="Download do Excel - Resultados das Simulações Avg OCC",
+                            data=output.getvalue(),
+                            file_name="resultados_simulacoes_avgocc.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    else:
+                        st.error("Data not found: 'dfautomation_hc' não está disponível no session_state.")
         else:
             st.write("Por favor, carregue o arquivo para prosseguir.") 
 
@@ -1004,31 +1006,42 @@ def upload_arquivo():
                     st.write("#### **Grupos e Subgrupos Não Alocados**")
                     st.dataframe(df_non_allocated, use_container_width=True, hide_index=True)
 
+                    # Armazena o DataFrame consolidado no session_state (caso já esteja criado em outra parte do código)
                     st.session_state["final_consolidated_df"] = final_consolidated_df
-
+                    
                     if st.button("Exportar 'Cenários' para Excel", key="export_cenarios_excel"):
-                        with io.BytesIO() as output:
-                            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                                if st.session_state.tables_to_append_dict:
-                                    final_consolidated_df = pd.concat(
-                                        st.session_state.tables_to_append_dict.values(), ignore_index=True
-                                    )
-                                else:
-                                    final_consolidated_df = pd.DataFrame()
-                                if "df_non_allocated" in st.session_state:
-                                    df_non_allocated = st.session_state.df_non_allocated.copy()
-                                else:
-                                    df_non_allocated = pd.DataFrame()
-                                final_consolidated_df = final_consolidated_df.fillna("")
-                                df_non_allocated = df_non_allocated.fillna("")
-                                final_consolidated_df.to_excel(writer, sheet_name="Cenarios", index=False)
-                                df_non_allocated.to_excel(writer, sheet_name="Não Alocados", index=False)
-                            st.download_button(
-                                label="Download do Excel - Cenários e Não Alocados",
-                                data=output.getvalue(),
-                                file_name="Cenarios_e_Nao_Alocados.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        # Reconstrói o DataFrame consolidado a partir dos DataFrames gravados, se houver
+                        if st.session_state.tables_to_append_dict:
+                            final_consolidated_df = pd.concat(
+                                st.session_state.tables_to_append_dict.values(), ignore_index=True
                             )
+                        else:
+                            final_consolidated_df = pd.DataFrame()
+                        
+                        # Tenta obter o DataFrame dos não alocados da session_state, ou cria um vazio se não existir
+                        if "df_non_allocated" in st.session_state:
+                            df_non_allocated = st.session_state.df_non_allocated.copy()
+                        else:
+                            df_non_allocated = pd.DataFrame()
+                        
+                        # Preenche valores NaN e converte para string (para evitar erros na exportação)
+                        final_consolidated_df = final_consolidated_df.fillna("")
+                        df_non_allocated = df_non_allocated.fillna("")
+                    
+                        # Cria o arquivo Excel em memória
+                        output = io.BytesIO()
+                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                            final_consolidated_df.to_excel(writer, sheet_name="Cenarios", index=False)
+                            df_non_allocated.to_excel(writer, sheet_name="Não Alocados", index=False)
+                        output.seek(0)
+                    
+                        st.download_button(
+                            label="Download do Excel - Cenários e Não Alocados",
+                            data=output.getvalue(),
+                            file_name="Cenarios_e_Nao_Alocados.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+
                 else:
                     st.write("Nenhum dado foi gravado ainda.")
 
