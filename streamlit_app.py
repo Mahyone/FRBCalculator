@@ -432,24 +432,26 @@ def upload_arquivo():
 
                 # Botão para exportar tabela "Resultados das Simulações" para Excel
                 if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado"):
-                    # Garantir que dfautomation_hc está salvo no session_state
-                    df_allocation_export = st.session_state.dfautomation_hc.fillna("")  # Acesso correto ao df_allocation salvo no session_state
-                    
-                    # Criar o arquivo Excel em memória
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                        df_allocation_export.to_excel(writer, sheet_name="Simulações HC", index=False)
-                    
-                    # Definir a posição do ponteiro para o início
-                    output.seek(0)
-                    
-                    # Adicionar botão de download
-                    st.download_button(
-                        label="Download do Excel - Resultados das Simulações HeadCount",
-                        data=output,
-                        file_name="resultados_simulacoes_hc.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                    if "dfautomation_hc" in st.session_state:
+                        # Acessa o DataFrame salvo no session_state e substitui NaN por string vazia
+                        df_allocation_export = st.session_state.dfautomation_hc.fillna("")
+                        
+                        # Cria o arquivo Excel em memória
+                        output = io.BytesIO()
+                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                            df_allocation_export.to_excel(writer, sheet_name="Simulações HC", index=False)
+                        output.seek(0)
+                        
+                        # Botão de download, utilizando output.getvalue() para retornar os bytes do arquivo
+                        st.download_button(
+                            label="Download do Excel - Resultados das Simulações HeadCount",
+                            data=output.getvalue(),
+                            file_name="resultados_simulacoes_hc.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    else:
+                        st.error("Data not found: 'dfautomation_hc' não está disponível no session_state.")
+
                     
 
             with st.expander("### Automação considerando Peak"):
