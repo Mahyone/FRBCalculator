@@ -869,7 +869,7 @@ def upload_arquivo():
                         - df_building_data_filtered['Lugares Ocupados Avg']
                     )
             
-                    st.dataframe(df_building_data_filtered, use_container_width=True)
+                    # st.dataframe(df_building_data_filtered, use_container_width=True)
             
                     # Entrada para margem de Risk
                     risk_value = st.text_input(
