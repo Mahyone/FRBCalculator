@@ -947,7 +947,7 @@ def upload_arquivo():
                         try:
                             st.experimental_rerun()
                         except Exception:
-                            st.info("Por favor, clique novamente em "Resetar Seção" para ver as alterações na seção.")
+                            st.info("Por favor, clique novamente em 'Resetar Seção' para ver as alterações na seção.")
 
 
             
