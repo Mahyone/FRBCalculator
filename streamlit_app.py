@@ -430,19 +430,26 @@ def upload_arquivo():
                     st.dataframe(df_hc_nonallocated_with_total, use_container_width=False)
 
 
-                # Botão para exportar tabela "Building" para Excel
-                if st.button("Exportar 'Automação HeadCount' para Excel", key="export_automacao_hc"):
-                    with io.BytesIO() as output:
-                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                            df_allocation = st.session_state.df_allocation
-                            df_allocation_export = df_allocation.fillna("")                        
-                            df_allocation_export.to_excel(writer, sheet_name="Automacao_HeadCount", index=False)
-                        st.download_button(
-                            label="Download do Excel - Automação HeadCount",
-                            data=output.getvalue(),
-                            file_name="automacao_headcount.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
+                # Botão para exportar tabela "Resultados das Simulações" para Excel
+                if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado"):
+                    # Garantir que dfautomation_hc está salvo no session_state
+                    df_allocation_export = st.session_state.dfautomation_hc.fillna("")  # Acesso correto ao df_allocation salvo no session_state
+                    
+                    # Criar o arquivo Excel em memória
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                        df_allocation_export.to_excel(writer, sheet_name="Simulações HC", index=False)
+                    
+                    # Definir a posição do ponteiro para o início
+                    output.seek(0)
+                    
+                    # Adicionar botão de download
+                    st.download_button(
+                        label="Download do Excel - Resultados das Simulações HeadCount",
+                        data=output,
+                        file_name="resultados_simulacoes_hc.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
                     
 
             with st.expander("### Automação considerando Peak"):
@@ -559,21 +566,26 @@ def upload_arquivo():
                     df_peak_nonallocated_total = pd.concat([df_peak_nonallocated, total_row_df], ignore_index=True)
                     st.dataframe(df_peak_nonallocated_total, use_container_width=False)
 
-
-
-                # Botão para exportar tabela "Building" para Excel
-                if st.button("Exportar 'Automação Peak' para Excel", key="export_automacao_peak"):
-                    with io.BytesIO() as output:
-                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                            df_allocation = st.session_state.df_allocation
-                            df_allocation_export = df_allocation.fillna("")                        
-                            df_allocation_export.to_excel(writer, sheet_name="Automacao_Peak", index=False)
-                        st.download_button(
-                            label="Download do Excel - Automação Peak",
-                            data=output.getvalue(),
-                            file_name="Automacao_Peak.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
+                # Botão para exportar tabela "Resultados das Simulações" para Excel
+                if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado_peak"):
+                    # Garantir que dfautomation_hc está salvo no session_state
+                    df_allocation_export = st.session_state.dfautomation_peak.fillna("")  # Acesso correto ao df_allocation salvo no session_state
+                    
+                    # Criar o arquivo Excel em memória
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                        df_allocation_export.to_excel(writer, sheet_name="Simulações Peak", index=False)
+                    
+                    # Definir a posição do ponteiro para o início
+                    output.seek(0)
+                    
+                    # Adicionar botão de download
+                    st.download_button(
+                        label="Download do Excel - Resultados das Simulações Peak",
+                        data=output,
+                        file_name="resultados_simulacoes_peak.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
 
 
@@ -690,19 +702,26 @@ def upload_arquivo():
                     df_avg_nonallocated_total = pd.concat([df_avg_nonallocated, total_row_df], ignore_index=True)
                     st.dataframe(df_avg_nonallocated_total, use_container_width=False)
 
-                # Botão para exportar tabela "Building" para Excel
-                if st.button("Exportar 'Automação Avg' para Excel", key="export_automacao_avg"):
-                    with io.BytesIO() as output:
-                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                            df_allocation = st.session_state.df_allocation
-                            df_allocation_export = df_allocation.fillna("")                        
-                            df_allocation_export.to_excel(writer, sheet_name="Automacao_Avg", index=False)
-                        st.download_button(
-                            label="Download do Excel - Automação Avg",
-                            data=output.getvalue(),
-                            file_name="Automacao_Avg.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
+                # Botão para exportar tabela "Resultados das Simulações" para Excel
+                if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado_avgocc"):
+                    # Garantir que dfautomation_hc está salvo no session_state
+                    df_allocation_export = st.session_state.dfautomation_avg.fillna("")  # Acesso correto ao df_allocation salvo no session_state
+                    
+                    # Criar o arquivo Excel em memória
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                        df_allocation_export.to_excel(writer, sheet_name="Simulações Avg Occ", index=False)
+                    
+                    # Definir a posição do ponteiro para o início
+                    output.seek(0)
+                    
+                    # Adicionar botão de download
+                    st.download_button(
+                        label="Download do Excel - Resultados das Simulações Avg Occ",
+                        data=output,
+                        file_name="resultados_simulacoes_avgocc.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
         else:
             st.write("Por favor, carregue o arquivo para prosseguir.") 
 
@@ -771,313 +790,247 @@ def upload_arquivo():
             # Inicializando a lista de tabelas no session_state, caso não tenha sido inicializada
             if "tables_to_append" not in st.session_state:
                 st.session_state.tables_to_append = []  # Lista vazia inicialmente
+
+
             
             # Exibindo as informações com expanders para cada 'Building Name'
             for building in df_final['Building Name'].unique():
                 with st.expander(f"#### **Informações do Andar: {building}**"):
                     st.write(f"**Informações do Andar: {building}**")
-                    df_building_data = df_final[df_final['Building Name'] == building]
+                    df_building_data = df_final[df_final['Building Name'] == building].copy()
                     primary_work_seats = df_building_data['Primary Work Seats'].iloc[0]
                     total_seats_on_floor = df_building_data['Total seats on floor'].iloc[0]
-                    
+
                     st.write(f"**Primary Work Seats**: {primary_work_seats}")
                     st.write(f"**Total seats on floor**: {total_seats_on_floor}")
 
-                    # Dropdown de multiseleção para 'Group' e 'SubGroup' dentro de cada seção
-                    groups_subgroups = df_building_data[['Group', 'SubGroup']].drop_duplicates()
-                    group_subgroup_options = []
-
-                    # Criando as combinações de 'Group' e 'SubGroup' para cada andar
-                    for index, row in groups_subgroups.iterrows():
-                        group_subgroup_options.append(f"{row['Group']} - {row['SubGroup']}" if row['SubGroup'] else f"{row['Group']} - ")
-
-                    # Passando uma chave única para o multiselect usando o 'building' (nome do andar)
-                    selected_options = st.multiselect(
-                        "Selecione os Grupos e Subgrupos",
-                        options=group_subgroup_options,
-                        default=None,
-                        key=f"multiselect_{building}"  # Usando o nome do andar como chave única
+                    # Cria a coluna de concatenação para filtro (não será exibida na tabela)
+                    df_building_data['Concat_G_SB_HC'] = (
+                        df_building_data['Group'] + ' - ' +
+                        df_building_data['SubGroup'].fillna('') + ' - ' +
+                        df_building_data['1:1'].astype(str)
                     )
 
-                    # Filtrando a tabela com base na seleção dentro do expander do building
-                    if selected_options:
-                        # Filtra os dados para que apenas as combinações selecionadas sejam mostradas
-                        df_building_data_filtered = df_building_data[df_building_data['Chave'].isin(selected_options)]
+                    # Obtém todas as opções de CONCAT para esta seção
+                    group_subgroup_options = df_building_data['Concat_G_SB_HC'].drop_duplicates().tolist()
+
+                    # Chave exclusiva para as seleções desta seção
+                    building_key = f"selected_options_{building}"
+                    if building_key not in st.session_state:
+                        st.session_state[building_key] = []  # Inicializa com lista vazia se não existir
+
+                    # Calcula as opções já gravadas globalmente (de todas as seções)
+                    global_recorded = set()
+                    for key in st.session_state.keys():
+                        if key.startswith("selected_options_"):
+                            global_recorded.update(st.session_state[key])
+
+                    # Se esta seção já tiver sido gravada, usamos a seleção gravada e desabilitamos o multiselect;
+                    # caso contrário, as opções disponíveis são os que não foram gravados em outras seções.
+                    if st.session_state[building_key]:
+                        available_options = st.session_state[building_key]
+                        multiselect_disabled = True
                     else:
-                        # Se não houver seleção, mostra todos os dados
+                        available_options = [opt for opt in group_subgroup_options if opt not in global_recorded]
+                        multiselect_disabled = False
+
+                    # Exibe o multiselect – inicialmente, todas as opções disponíveis são selecionadas
+                    selected_options = st.multiselect(
+                        "Selecione os Grupos e Subgrupos (incluindo 1:1)",
+                        options=available_options,
+                        default=available_options,
+                        key=f"multiselect_{building}",
+                        disabled=multiselect_disabled
+                    )
+
+                    # Filtra a tabela de acordo com as opções selecionadas no multiselect
+                    if selected_options:
+                        df_building_data_filtered = df_building_data[df_building_data['Concat_G_SB_HC'].isin(selected_options)]
+                    else:
                         df_building_data_filtered = df_building_data
 
-
-                    # Recalcular os cálculos de Saldo e Cumsum após filtragem
+                    # Cálculos dinâmicos para 1:1, Peak e Avg Occ
                     df_building_data_filtered['Lugares Ocupados 1:1'] = df_building_data_filtered['1:1'].cumsum()
+                    df_building_data_filtered['Lugares Disponíveis 1:1'] = (
+                        df_building_data_filtered.groupby('Building Name')['Primary Work Seats'].transform('first')
+                        - df_building_data_filtered['Lugares Ocupados 1:1']
+                    )
+                    df_building_data_filtered['Lugares Ocupados Peak'] = df_building_data_filtered['Peak'].cumsum()
+                    df_building_data_filtered['Lugares Disponíveis Peak'] = (
+                        df_building_data_filtered.groupby('Building Name')['Primary Work Seats'].transform('first')
+                        - df_building_data_filtered['Lugares Ocupados Peak']
+                    )
+                    df_building_data_filtered['Lugares Ocupados Avg'] = df_building_data_filtered['Avg Occ'].cumsum()
+                    df_building_data_filtered['Lugares Disponíveis Avg'] = (
+                        df_building_data_filtered.groupby('Building Name')['Primary Work Seats'].transform('first')
+                        - df_building_data_filtered['Lugares Ocupados Avg']
+                    )
 
-                    # Calcular 'Lugares Disponíveis 1:1' individualmente para cada andar
-                    df_building_data_filtered['Lugares Disponíveis 1:1'] = df_building_data_filtered.groupby('Building Name')['Primary Work Seats'].transform('first') - df_building_data_filtered['Lugares Ocupados 1:1']
+                    st.dataframe(df_building_data_filtered, use_container_width=True)
 
-                    # Cálculos para Peak e Avg com exceção
-                    def calcular_lugares_ocupados(row, column_name, headcount_column):
-                        if row['Exception (Y/N)'] == 'Y':
-                            return row[headcount_column]
-                        return row[column_name]
-
-                    # Cálculo para 'Lugares Ocupados Peak'
-                    df_building_data_filtered['Lugares Ocupados Peak'] = df_building_data_filtered.apply(lambda row: calcular_lugares_ocupados(row, 'Peak', '1:1'), axis=1)
-                    
-                    # Cálculo para 'Lugares Ocupados Avg'
-                    df_building_data_filtered['Lugares Ocupados Avg'] = df_building_data_filtered.apply(lambda row: calcular_lugares_ocupados(row, 'Avg Occ', '1:1'), axis=1)
-
-                    # Cálculos acumulados para Peak e Avg
-                    df_building_data_filtered['Lugares Ocupados Peak'] = df_building_data_filtered.groupby('Building Name')['Lugares Ocupados Peak'].cumsum()
-                    df_building_data_filtered['Lugares Ocupados Avg'] = df_building_data_filtered.groupby('Building Name')['Lugares Ocupados Avg'].cumsum()
-
-                    # Calculando 'Lugares Disponíveis Peak' e 'Lugares Disponíveis Avg'
-                    df_building_data_filtered['Lugares Disponíveis Peak'] = df_building_data_filtered.groupby('Building Name')['Primary Work Seats'].transform('first') - df_building_data_filtered['Lugares Ocupados Peak']
-                    df_building_data_filtered['Lugares Disponíveis Avg'] = df_building_data_filtered.groupby('Building Name')['Primary Work Seats'].transform('first') - df_building_data_filtered['Lugares Ocupados Avg']                    
-
-                    # Caixa de Texto para input de Margem de Growth e Risk          
-                    growth_value = st.text_input(f"Growth (numérico, não digitar o símbolo '%') para {building}", value="", key=f"growth_input_{building}")
-                    risk_value = st.text_input(f"Risk (numérico, não digitar o símbolo '%') para {building}", value="", key=f"risk_input_{building}")
-
-                    # Converte os valores para inteiros, ou 0 se estiverem vazios
-                    growth_value = int(growth_value) if growth_value else 0
+                    # Entrada para margem de Risk
+                    risk_value = st.text_input(
+                        f"Risk (numérico, sem '%') para {building}",
+                        value="",
+                        key=f"risk_input_{building}"
+                    )
                     risk_value = int(risk_value) if risk_value else 0
 
-                    # Calcular as novas colunas, se Growth ou Risk forem preenchidos
-                    df_building_data_filtered['Growth 1:1'] = df_building_data_filtered['1:1'] * (1 + growth_value / 100)
-                    df_building_data_filtered['Saldo Growth 1:1'] = df_building_data_filtered['Primary Work Seats'] - df_building_data_filtered['Growth 1:1']
-                    df_building_data_filtered['Growth 1:1'] = df_building_data_filtered['Growth 1:1'].round(0).astype(int)
-                    df_building_data_filtered['Saldo Growth 1:1'] = df_building_data_filtered['Saldo Growth 1:1'].round(0).astype(int)
-
-                    df_building_data_filtered['Growth Peak'] = df_building_data_filtered['Peak'] * (1 + growth_value / 100)
-                    df_building_data_filtered['Saldo Growth Peak'] = df_building_data_filtered['Primary Work Seats'] - df_building_data_filtered['Growth Peak']
-                    df_building_data_filtered['Growth Peak'] = df_building_data_filtered['Growth Peak'].round(0).astype(int)
-                    df_building_data_filtered['Saldo Growth Peak'] = df_building_data_filtered['Saldo Growth Peak'].round(0).astype(int)
-
-                    df_building_data_filtered['Growth Avg Occ'] = df_building_data_filtered['Avg Occ'] * (1 + growth_value / 100)
-                    df_building_data_filtered['Saldo Growth Avg Occ'] = df_building_data_filtered['Primary Work Seats'] - df_building_data_filtered['Growth Avg Occ']
-                    df_building_data_filtered['Growth Avg Occ'] = df_building_data_filtered['Growth Avg Occ'].round(0).astype(int)
-                    df_building_data_filtered['Saldo Growth Avg Occ'] = df_building_data_filtered['Saldo Growth Avg Occ'].round(0).astype(int)
-
+                    # Cálculos relacionados ao Risk
                     df_building_data_filtered['Risk 1:1'] = df_building_data_filtered['1:1'] * (1 - risk_value / 100)
-                    df_building_data_filtered['Saldo Risk 1:1'] = df_building_data_filtered['Primary Work Seats'] - df_building_data_filtered['Risk 1:1']
+                    df_building_data_filtered['Saldo Risk 1:1'] = (
+                        df_building_data_filtered['Primary Work Seats'] - df_building_data_filtered['Risk 1:1']
+                    )
                     df_building_data_filtered['Risk 1:1'] = df_building_data_filtered['Risk 1:1'].round(0).astype(int)
                     df_building_data_filtered['Saldo Risk 1:1'] = df_building_data_filtered['Saldo Risk 1:1'].round(0).astype(int)
 
                     df_building_data_filtered['Risk Peak'] = df_building_data_filtered['Peak'] * (1 - risk_value / 100)
-                    df_building_data_filtered['Saldo Risk Peak'] = df_building_data_filtered['Primary Work Seats'] - df_building_data_filtered['Risk Peak']
+                    df_building_data_filtered['Saldo Risk Peak'] = (
+                        df_building_data_filtered['Primary Work Seats'] - df_building_data_filtered['Risk Peak']
+                    )
                     df_building_data_filtered['Risk Peak'] = df_building_data_filtered['Risk Peak'].round(0).astype(int)
                     df_building_data_filtered['Saldo Risk Peak'] = df_building_data_filtered['Saldo Risk Peak'].round(0).astype(int)
 
                     df_building_data_filtered['Risk Avg Occ'] = df_building_data_filtered['Avg Occ'] * (1 - risk_value / 100)
-                    df_building_data_filtered['Saldo Risk Avg Occ'] = df_building_data_filtered['Primary Work Seats'] - df_building_data_filtered['Risk Avg Occ']
+                    df_building_data_filtered['Saldo Risk Avg Occ'] = (
+                        df_building_data_filtered['Primary Work Seats'] - df_building_data_filtered['Risk Avg Occ']
+                    )
                     df_building_data_filtered['Risk Avg Occ'] = df_building_data_filtered['Risk Avg Occ'].round(0).astype(int)
                     df_building_data_filtered['Saldo Risk Avg Occ'] = df_building_data_filtered['Saldo Risk Avg Occ'].round(0).astype(int)
 
-                    df_building_data_filtered.rename(columns={"Lugares Disponíveis 1:1" : "Saldo 1:1", "Lugares Ocupados 1:1" : "Occupied 1:1", 
-                                                              "Lugares Ocupados Peak" : "Occupied Peak", "Lugares Disponíveis Peak" : "Saldo Peak" , 
-                                                              "Lugares Ocupados Avg" : "Occupied Avg", "Lugares Disponíveis Avg" : "Saldo Avg Occ"}, inplace=True)
+                    # Renomeia as colunas para exibição
+                    df_building_data_filtered.rename(columns={
+                        "Lugares Disponíveis 1:1": "Saldo 1:1",
+                        "Lugares Ocupados 1:1": "Occupied 1:1",
+                        "Lugares Ocupados Peak": "Occupied Peak",
+                        "Lugares Disponíveis Peak": "Saldo Peak",
+                        "Lugares Ocupados Avg": "Occupied Avg",
+                        "Lugares Disponíveis Avg": "Saldo Avg Occ"
+                    }, inplace=True)
 
-                                    
-                    ## Para exibir a tabela com os calculos
-                    #columns_to_display = ['Building Name', 'Group', 'SubGroup', 'Exception (Y/N)', '1:1', 'Occupied 1:1' ,'Saldo 1:1', 'Peak', 'Occupied Peak', 'Saldo Peak',
-                    #                      'Avg Occ', 'Occupied Avg', 'Saldo Avg Occ']
-                    #if growth_value != 0:
-                    #    columns_to_display += ['Growth 1:1', 'Saldo Growth 1:1', 'Growth Peak', 'Saldo Growth Peak', 'Growth Avg Occ', 'Saldo Growth Avg Occ']                
-                    #if risk_value != 0:
-                    #    columns_to_display += ['Risk 1:1', 'Saldo Risk 1:1', 'Risk Peak', 'Saldo Risk Peak', 'Risk Avg Occ', 'Saldo Risk Avg Occ']
-                    # Salvando o DataFrame filtrado em uma variável
-                    #df_filtered_output = df_building_data_filtered[columns_to_display]
-                    #st.dataframe(df_filtered_output, use_container_width=False)
-
-
-                    #### COLOROÇÃO DO PLANO DE FUNDO APENAS PARA DESTACAR QUE ESTAMOS ADICIONANDO COLUNAS DE GROWTH E RISK
-                    columns_to_display_filter = ['Building Name', 'Group', 'SubGroup', 'Exception (Y/N)', '1:1', 'Saldo 1:1', 'Peak', 'Saldo Peak', 'Avg Occ', 'Saldo Avg Occ']
-                    # Inicialização das colunas de Growth e Risk
-                    columns_growth = ['Saldo Growth 1:1', 'Saldo Growth Peak', 'Saldo Growth Avg Occ']
+                    columns_to_display_filter = [
+                        'Building Name', 'Group', 'SubGroup', 'Exception (Y/N)',
+                        '1:1', 'Saldo 1:1', 'Peak', 'Saldo Peak', 'Avg Occ', 'Saldo Avg Occ'
+                    ]
                     columns_risk = ['Saldo Risk 1:1', 'Saldo Risk Peak', 'Saldo Risk Avg Occ']
-
-                    # Condicional para adicionar as colunas de Growth e Risk
-                    if growth_value != 0:
-                        columns_to_display_filter += columns_growth
-
                     if risk_value != 0:
                         columns_to_display_filter += columns_risk
 
-                    # Função para colorir as células com base no tipo de dado
                     def colorize(val):
                         if isinstance(val, (int, float)):
-                            if val >= 0:
-                                return 'background-color: white'  # Verde claro para valores positivos
-                            elif val < 0:
-                                return 'background-color: #FFBDBD'  # Coral para valores negativos
-                        return 'background-color: white'  # Padrão branco para valores não numéricos
+                            return 'background-color: white' if val >= 0 else 'background-color: #FFBDBD'
+                        return 'background-color: white'
 
-                    # Função para aplicar fundo cinza para Growth e Risk
-                    def colorize_growth_risk(val, columns_type):
-                        if isinstance(val, (int, float)):  # Verifica se o valor é numérico
-                            if columns_type == 'Growth':  # Aplica para as colunas de Growth
-                                if val >= 0 or val < 0:  # Valores maiores ou iguais a zero (para Growth)
-                                    return 'background-color: #EDEDED'  # Fundo cinza claro
-                            elif columns_type == 'Risk':  # Aplica para as colunas de Risk
-                                if val >= 0 or val < 0:  # Valores menores ou iguais a zero (para Risk)
-                                    return 'background-color: #DDEBF7'  # Fundo azul claro
-                        return 'background-color: white'  # Para valores não numéricos ou outras condições
+                    def colorize_risk(val):
+                        if isinstance(val, (int, float)):
+                            return 'background-color: #DDEBF7'
+                        return 'background-color: white'
 
-                    # Aplicando o estilo para as colunas de Growth, Risk e outras
                     styled_df = df_building_data_filtered[columns_to_display_filter].style
-
-                    # Aplicando o estilo condicional para Growth
-                    if growth_value != 0:
-                        styled_df = styled_df.applymap(lambda val: colorize_growth_risk(val, 'Growth'), subset=columns_growth)
-
-                    # Aplicando o estilo condicional para Risk
                     if risk_value != 0:
-                        styled_df = styled_df.applymap(lambda val: colorize_growth_risk(val, 'Risk'), subset=columns_risk)
-
-                    # Aplicando o estilo para as outras colunas (não Growth e Risk)
+                        styled_df = styled_df.applymap(colorize_risk, subset=columns_risk)
                     styled_df = styled_df.applymap(colorize, subset=['1:1', 'Saldo 1:1', 'Peak', 'Saldo Peak', 'Avg Occ', 'Saldo Avg Occ'])
-                    st.dataframe(styled_df, use_container_width=False, hide_index=True)
+                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-
-                    # Botão de Gravar Dados
-                    if "tables_to_append_df" not in st.session_state:
-                        st.session_state.tables_to_append_df = pd.DataFrame()  # DataFrame vazio para consolidar os dados
-
-                    # Botão de Gravar Dados para cada prédio
-                    if "tables_to_append_dict" not in st.session_state:
-                        st.session_state.tables_to_append_dict = {}
-
-                    # Botão de Gravar Dados para cada prédio
+                    # Botão para Gravar Dados nesta seção
                     if st.button(f"Gravar Dados para {building}"):
-                        df_to_save = styled_df.data.copy() 
+                        # Armazena as opções selecionadas para esta seção
+                        st.session_state[building_key] = selected_options
+                        # Armazena o DataFrame filtrado (consolidado) para este prédio
+                        st.session_state.tables_to_append_dict[building] = styled_df.data.copy()
+                        st.success(f"Dados do prédio **{building}** gravados com sucesso!")
 
-                        if not df_to_save.empty:
-                            # Salva o DataFrame na sessão para esse `building`
-                            st.session_state.tables_to_append_dict[building] = df_to_save
+                    # Botão para Resetar a Seção (apenas esta seção é resetada)
+                    if st.button(f"Resetar Seção para {building}"):
+                        st.session_state[building_key] = []  # Limpa as seleções desta seção
+                        try:
+                            st.experimental_rerun()
+                        except Exception:
+                            st.info("Por favor, recarregue a página para ver as alterações na seção.")
 
-                            st.success(f"Dados do prédio **{building}** gravados com sucesso!")
-
-            
-            # Ao final, exibir o expander para mostrar a tabela consolidada
+            # Seção final para exibir o consolidado de todos os cenários
             with st.expander("### **Resultado de todos os Cenários:**"):
-
                 if st.session_state.tables_to_append_dict:
-                    
                     st.write("### **Dados Gravados**")
-
-                    #  Concatena todos os DataFrames armazenados na sessão
+                    # Concatena todos os DataFrames armazenados
                     final_consolidated_df = pd.concat(
                         st.session_state.tables_to_append_dict.values(), ignore_index=True
                     )
 
-                    #  Função para arredondar e tratar valores NaN
+                    # Função para arredondar e tratar valores numéricos
                     def round_and_convert_to_int(df):
                         numeric_columns = df.select_dtypes(include=['number']).columns
                         df[numeric_columns] = df[numeric_columns].replace([np.inf, -np.inf, np.nan], 0)
-                        df[numeric_columns] = df[numeric_columns].round(0).astype(int)                
+                        df[numeric_columns] = df[numeric_columns].round(0).astype(int)
                         return df
 
-                    #  Aplica a formatação final à tabela consolidada
                     final_consolidated_df = round_and_convert_to_int(final_consolidated_df)
 
-                    #  Aplica cores de destaque na tabela consolidada
+                    # Aplica cor de destaque na tabela consolidada
                     def colorize(val):
                         if isinstance(val, (int, float)):
-                            if val >= 0:
-                                return 'background-color: white'  # Branco para valores positivos
-                            elif val < 0:
-                                return 'background-color: #FFBDBD'  # Coral para valores negativos
-                        return 'background-color: white'  # Branco para valores não numéricos
+                            return 'background-color: white' if val >= 0 else 'background-color: #FFBDBD'
+                        return 'background-color: white'
 
                     final_consolidated_df_colour = final_consolidated_df.style.applymap(
                         colorize, subset=['1:1', 'Saldo 1:1', 'Peak', 'Saldo Peak', 'Avg Occ', 'Saldo Avg Occ']
                     )
 
-
-                    # Exibe a tabela consolidada corretamente
                     st.write("#### **Consolidado de todos os cenários:**")
                     st.dataframe(final_consolidated_df_colour, use_container_width=True, hide_index=True)
 
-                    # Criar a "chave" de identificação de Groups e Subgroups no consolidado
+                    # Cria a chave de identificação para grupos e subgrupos no consolidado
                     final_consolidated_df["Chave"] = final_consolidated_df.apply(
-                        lambda row: f"{row['Group']} - {row['SubGroup']}" if row['SubGroup'] else f"{row['Group']} - ", axis=1
+                        lambda row: f"{row['Group']} - {row['SubGroup']}" if row['SubGroup'] else f"{row['Group']} - ",
+                        axis=1
                     )
 
-                    # Criar a "chave" de identificação em `df_proportional_cenarios`
+                    # Cria a chave de identificação em df_proportional_cenarios
                     proportional_groups_subgroups = df_proportional_cenarios.copy()
                     proportional_groups_subgroups["Chave"] = proportional_groups_subgroups.apply(
-                        lambda row: f"{row['Group']} - {row['SubGroup']}" if row['SubGroup'] else f"{row['Group']} - ", axis=1
+                        lambda row: f"{row['Group']} - {row['SubGroup']}" if row['SubGroup'] else f"{row['Group']} - ",
+                        axis=1
                     )
 
-                    # Selecionar apenas as colunas relevantes, removendo duplicatas
                     consolidated_groups_subgroups = final_consolidated_df[['Chave']].drop_duplicates()
 
-                    # Realizar a diferença entre os Grupos/Subgrupos para encontrar os **não alocados**
+                    # Encontra os grupos/subgrupos não alocados
                     df_non_allocated = proportional_groups_subgroups.merge(
                         consolidated_groups_subgroups, on="Chave", how="left", indicator=True
                     ).query('_merge == "left_only"').drop('_merge', axis=1)
 
-                    # Exibir os Grupos e Subgrupos não alocados
                     st.write("#### **Grupos e Subgrupos Não Alocados**")
-                    st.dataframe(df_non_allocated, use_container_width=False, hide_index=True)
+                    st.dataframe(df_non_allocated, use_container_width=True, hide_index=True)
 
-                    # Adiciona a tabelano st_session_state
                     st.session_state["final_consolidated_df"] = final_consolidated_df
-
 
                     if st.button("Exportar 'Cenários' para Excel", key="export_cenarios_excel"):
                         with io.BytesIO() as output:
-                            # Criar um ExcelWriter para escrever os dados no arquivo
                             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                                
-                                #  Recupera os dados consolidados da sessão
-                                if "tables_to_append_dict" in st.session_state and st.session_state.tables_to_append_dict:
+                                if st.session_state.tables_to_append_dict:
                                     final_consolidated_df = pd.concat(
                                         st.session_state.tables_to_append_dict.values(), ignore_index=True
                                     )
                                 else:
-                                    final_consolidated_df = pd.DataFrame()  # DataFrame vazio se não houver dados
-
-                                #  Recupera os dados de "Não Alocados"
+                                    final_consolidated_df = pd.DataFrame()
                                 if "df_non_allocated" in st.session_state:
                                     df_non_allocated = st.session_state.df_non_allocated.copy()
                                 else:
-                                    df_non_allocated = pd.DataFrame()  # DataFrame vazio se não houver dados
-
-                                #  Tratamento de valores NaN
+                                    df_non_allocated = pd.DataFrame()
                                 final_consolidated_df = final_consolidated_df.fillna("")
                                 df_non_allocated = df_non_allocated.fillna("")
-
-                                #  Exporta final_consolidated_df para a aba "Cenarios"
                                 final_consolidated_df.to_excel(writer, sheet_name="Cenarios", index=False)
-
-                                #  Exporta df_non_allocated para a aba "Não Alocados"
                                 df_non_allocated.to_excel(writer, sheet_name="Não Alocados", index=False)
-
-                            # Exibe o botão de download
                             st.download_button(
                                 label="Download do Excel - Cenários e Não Alocados",
                                 data=output.getvalue(),
                                 file_name="Cenarios_e_Nao_Alocados.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
-                   
-
-        else:
-            st.write("Nenhum dado foi gravado ainda.")
+                else:
+                    st.write("Nenhum dado foi gravado ainda.")
 
 
-        if st.button("Resetar Cenários"):
-            # Limpando todos os dados armazenados no session_state
-            st.session_state.clear()
-
-            # Mensagem de confirmação
-            st.success("Simulação resetada com sucesso!")
-
-            # Opcional: Exibir algo ou recarregar a página, se necessário
-            # Aqui você pode adicionar qualquer ação extra ou recarregar a interface
-            st.rerun()  # Força a página a reiniciar
-        
 
 
 
