@@ -870,7 +870,7 @@ def upload_arquivo():
                         - df_building_data_filtered['Lugares Ocupados Avg']
                     )
 
-                    st.dataframe(df_building_data_filtered, use_container_width=True)
+                    # st.dataframe(df_building_data_filtered, use_container_width=True)
 
                     # Entrada para margem de Risk
                     risk_value = st.text_input(
@@ -1010,21 +1010,21 @@ def upload_arquivo():
                     st.session_state["final_consolidated_df"] = final_consolidated_df
                     
                     if st.button("Exportar 'Cenários' para Excel", key="export_cenarios_excel"):
-                        # Reconstrói o DataFrame consolidado a partir dos DataFrames gravados, se houver
-                        if st.session_state.tables_to_append_dict:
+                        # Recupera e consolida os DataFrames gravados, se houver; caso contrário, cria um DataFrame vazio
+                        if st.session_state.get("tables_to_append_dict") and st.session_state.tables_to_append_dict:
                             final_consolidated_df = pd.concat(
                                 st.session_state.tables_to_append_dict.values(), ignore_index=True
                             )
                         else:
                             final_consolidated_df = pd.DataFrame()
-                        
-                        # Tenta obter o DataFrame dos não alocados da session_state, ou cria um vazio se não existir
-                        if "df_non_allocated" in st.session_state:
+                    
+                        # Recupera o DataFrame de não alocados, se existir; caso contrário, cria um DataFrame vazio
+                        if st.session_state.get("df_non_allocated"):
                             df_non_allocated = st.session_state.df_non_allocated.copy()
                         else:
                             df_non_allocated = pd.DataFrame()
-                        
-                        # Preenche valores NaN e converte para string (para evitar erros na exportação)
+                    
+                        # Preenche NaN para evitar problemas na exportação
                         final_consolidated_df = final_consolidated_df.fillna("")
                         df_non_allocated = df_non_allocated.fillna("")
                     
@@ -1035,6 +1035,7 @@ def upload_arquivo():
                             df_non_allocated.to_excel(writer, sheet_name="Não Alocados", index=False)
                         output.seek(0)
                     
+                        # Botão para download do arquivo Excel
                         st.download_button(
                             label="Download do Excel - Cenários e Não Alocados",
                             data=output.getvalue(),
