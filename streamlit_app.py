@@ -254,7 +254,7 @@ def upload_arquivo():
                 #df_enriquecido = df_proportional.copy()
                 #df_enriquecido = df_enriquecido[['Current Location', 'Group', 'SubGroup', 'FTE','CW', 'Growth', 'HeadCount', 'Exception (Y/N)', 'Comments', 'Avg Peak', 'Avg Occupancy','Adjacency Priority 1', 'Adjacency Priority 2', 'Adjacency Priority 3']]      
 
-                df_proportional = df_proportional[['Current Location', 'Group', 'SubGroup', 'FTE','CW', 'Growth', 'HeadCount', 'Exception (Y/N)', 'Comments', 'Proportional Peak', 'Proportional Avg',
+                df_proportional = df_proportional[['Current Location', 'Group', 'SubGroup', 'FTE','CW', 'Growth', 'HeadCount', 'Exception (Y/N)', 'Proportional Peak', 'Proportional Avg',
                                                    'Adjacency Priority 1', 'Adjacency Priority 2', 'Adjacency Priority 3']]             
 
 
@@ -387,7 +387,8 @@ def upload_arquivo():
                     # Ordenar os dados por 'Building Name'
                     df_allocation = df_allocation.sort_values(by='Building Name')
                     st.write("#### Resultado da Automação - HeadCount")
-                    st.dataframe(df_allocation.fillna(""), use_container_width=False)
+                    df_allocation_styled = df_allocation.style.applymap(lambda x: 'background-color: #D3D3D3', subset=['HeadCount'])
+                    st.dataframe(df_allocation_styled, use_container_width=False)
 
                     # Exibir a capacidade restante nos andares
                     st.write("#### Capacidade restante nos andares - HeadCount:")
@@ -470,7 +471,7 @@ def upload_arquivo():
                 ).sum()
 
                 # Exibir o valor total
-                st.write(f"**Total Avg Peak**: {total_proppeak} || **Total Avg Peak Exception**: {total_proportional_Peak_exception}")
+                st.write(f"**Total Avg Peak**: {total_proppeak} || **Total Avg Peak with Exception**: {total_proportional_Peak_exception}")
 
 
                 def allocate_groups_peak(df_proportional, floors):
@@ -521,6 +522,13 @@ def upload_arquivo():
                     # Ordenar os dados por 'Building Name'
                     df_allocation = df_allocation.sort_values(by='Building Name')
                     st.write("#### Resultado da Automação - Peak")
+                    df_allocation['Peak with Exception'] = df_allocation.apply(lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'], axis=1)
+                    df_allocation.drop(columns=['Proportional Peak'], inplace=True)
+                    df_allocation.rename(columns={'Proportional Avg' : 'Avg Occ'}, inplace=True)
+                    df_allocation = df_allocation[['Current Location', 'Group', 'SubGroup', 'FTE', 'CW', 'Growth', 'HeadCount', 'Exception (Y/N)', 'Peak with Exception', 'Avg Occ', 'Adjacency Priority 1', 
+                                                   'Adjacency Priority 2', 'Adjacency Priority 3', 'Building Name']]
+                    df_allocation_styled = df_allocation.style.applymap(lambda x: 'background-color: #D3D3D3', subset=['Peak with Exception'])
+                    st.dataframe(df_allocation_styled, use_container_width=False)
                     st.dataframe(df_allocation.fillna(""), use_container_width=False)
 
                     # Exibir a capacidade restante nos andares
@@ -556,11 +564,6 @@ def upload_arquivo():
 
                     st.write("### Grupos Não Alocados:")
                     df_peak_nonallocated = df_allocation[df_allocation['Building Name'] == 'Não Alocado']
-                    df_peak_nonallocated['Peak_Exception'] = df_peak_nonallocated.apply(
-                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'],
-                    axis=1
-                    )
-
                     numeric_columns = df_peak_nonallocated.select_dtypes(include='number').columns
                     total_row = df_peak_nonallocated[numeric_columns].sum()
                     total_row['Group'] = 'Total' 
@@ -570,7 +573,7 @@ def upload_arquivo():
 
                 # Botão para exportar tabela "Resultados das Simulações" para Excel
                 if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado_peak"):
-                    if "dfautomation_hc" in st.session_state:
+                    if "dfautomation_peak" in st.session_state:
                         # Acessa o DataFrame salvo no session_state e substitui NaN por string vazia
                         df_allocation_export = st.session_state.dfautomation_peak.fillna("")
                         
@@ -588,7 +591,7 @@ def upload_arquivo():
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
                     else:
-                        st.error("Data not found: 'dfautomation_hc' não está disponível no session_state.")
+                        st.error("Data not found: 'dfautomation_peak' não está disponível no session_state.")
 
 
 
@@ -608,7 +611,7 @@ def upload_arquivo():
                 ).sum()
 
                 # Exibir o valor total
-                st.write(f"**Total Avg**: {total_propavg} || **Total Avg Exception**: {total_proportional_Avg_exception}")
+                st.write(f"**Total Avg**: {total_propavg} || **Total Avg with Exception**: {total_proportional_Avg_exception}")
 
                 
                 def allocate_groups_avg(df_proportional, floors):
@@ -659,6 +662,12 @@ def upload_arquivo():
                     # Ordenar os dados por 'Building Name'
                     df_allocation = df_allocation.sort_values(by='Building Name')
                     st.write("#### Resultado da Automação - Avg Occ")
+                    df_allocation['Avg Occ with Exception'] = df_allocation.apply(lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'], axis=1)
+                    # df_allocation.drop(columns=['Proportional Peak'], inplace=True)
+                    df_allocation = df_allocation[['Current Location', 'Group', 'SubGroup', 'FTE', 'CW', 'Growth', 'HeadCount', 'Exception (Y/N)', 'Avg Occ with Exception', 'Adjacency Priority 1', 
+                                                   'Adjacency Priority 2', 'Adjacency Priority 3', 'Building Name']]
+                    df_allocation_styled = df_allocation.style.applymap(lambda x: 'background-color: #D3D3D3', subset=['Avg Occ with Exception'])
+                    st.dataframe(df_allocation_styled, use_container_width=False)
                     st.dataframe(df_allocation.fillna(""), use_container_width=False)
 
                     # Exibir a capacidade restante nos andares
@@ -693,11 +702,6 @@ def upload_arquivo():
 
                     st.write("### Grupos Não Alocados:")
                     df_avg_nonallocated = df_allocation[df_allocation['Building Name'] == 'Não Alocado']
-                    df_avg_nonallocated['Avg_Exception'] = df_avg_nonallocated.apply(
-                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'],
-                    axis=1
-                    )
-
                     numeric_columns = df_avg_nonallocated.select_dtypes(include='number').columns
                     total_row = df_avg_nonallocated[numeric_columns].sum()
                     total_row['Group'] = 'Total' 
@@ -1138,6 +1142,7 @@ def upload_arquivo():
 
                 # Adiciona um espaço maior usando <br> no Markdown
                 st.markdown("<br><br><br>", unsafe_allow_html=True)  # Adiciona 3 quebras de linha
+                
 
 
             #### BIG NUMBERS - CABEÇALHO DONUTS
@@ -1196,11 +1201,7 @@ def upload_arquivo():
                 df_merged_sorted_peak = df_merged_peak.sort_values(by=['Building Name', 'Group', 'SubGroup'])
                 
                 # Calcular o "Proportional Peak Exception" (Exception = Y) diretamente no backend
-                df_merged_sorted_peak['Peak_Exc'] = df_merged_sorted_peak.apply(
-                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'],
-                    axis=1
-                )
-                df_merged_sorted_peak['CumSum Peak_Exc'] = df_merged_sorted_peak.groupby('Building Name')['Peak_Exc'].cumsum()
+                df_merged_sorted_peak['CumSum Peak_Exc'] = df_merged_sorted_peak.groupby('Building Name')['Peak with Exception'].cumsum()
                 df_merged_sorted_peak['AvailableCumSum'] = df_merged_sorted_peak['Primary Work Seats'] - df_merged_sorted_peak['CumSum Peak_Exc']
 
                 # Lugares Disponíveis por Andar
@@ -1214,31 +1215,31 @@ def upload_arquivo():
                 df_avail_peak = pd.concat([df_availability_peak, df_avail_row_peak], ignore_index=True)
                 df_avail_peak.rename(columns={"CumSum Peak_Exc" : "Total Peak"}, inplace=True)
 
-                total_avgpeak = df_merged_sorted_peak['Peak_Exc'].sum()
+                total_avgpeak = df_merged_sorted_peak['Peak with Exception'].sum()
 
                 # 2.1) % Alocados AVG PEAK
-                allocated_peak = df_merged_sorted_peak[df_merged_sorted_peak['Building Name'] != 'Não Alocado']['Peak_Exc'].sum()
+                allocated_peak = df_merged_sorted_peak[df_merged_sorted_peak['Building Name'] != 'Não Alocado']['Peak with Exception'].sum()
                 percent_allocated_peak = (allocated_peak / total_avgpeak) * 100 if total_avgpeak > 0 else 0
                 percent_allocated_peak = percent_allocated_peak.round(0).astype(int)
 
                 # 2.2) Qtde Não Alocados AVG PEAK
-                non_allocated_peak = df_merged_sorted_peak[df_merged_sorted_peak['Building Name'] == 'Não Alocado']['Peak_Exc'].sum()
+                non_allocated_peak = df_merged_sorted_peak[df_merged_sorted_peak['Building Name'] == 'Não Alocado']['Peak with Exception'].sum()
                 non_allocated_groups_peak = df_merged_sorted_peak[df_merged_sorted_peak['Building Name'] == 'Não Alocado']
-                non_allocated_groups_peak = non_allocated_groups_peak[["Group", "SubGroup", "Peak_Exc"]].sort_values(by=["Group","SubGroup"])
+                non_allocated_groups_peak = non_allocated_groups_peak[["Group", "SubGroup", "Peak with Exception"]].sort_values(by=["Group","SubGroup"])
 
                 # 2.3 - GRÁFICO DE DONUT - AVG PEAK
                 df_merged_sorted_peak['Status'] = df_merged_sorted_peak['Building Name'].apply(lambda x: 'Alocado' if x != 'Não Alocado' else 'Não Alocado')
                 # Agrupando o HeadCount por Status
-                peak_by_status = df_merged_sorted_peak.groupby('Status').agg({'Peak_Exc': 'sum'}).reset_index()
+                peak_by_status = df_merged_sorted_peak.groupby('Status').agg({'Peak with Exception': 'sum'}).reset_index()
                 # Criando o gráfico de Donut com Plotly
                 figpeak = px.pie(peak_by_status, 
                             names='Status', 
-                            values='Peak_Exc', 
+                            values='Peak with Exception', 
                             title='',
                             hole=0.3,  # Cria o efeito de donut
                             color='Status',
                             color_discrete_map={"Alocado": "#00CFFF", "Não Alocado": "#FFAA33"},  # Definindo as cores
-                            labels={"Peak_Exc": "Total Peak Exc"})  # Renomeia o label no gráfico
+                            labels={"Peak with Exception": "Total Peak Exc"})  # Renomeia o label no gráfico
                 # Adicionando os valores absolutos e percentuais como rótulos
                 figpeak.update_traces(textinfo='percent+label', pull=[0.1, 0.1])  # Exibindo percentagem e label
                 figpeak.update_layout(
@@ -1268,11 +1269,7 @@ def upload_arquivo():
                 df_merged_sorted_avg = df_merged_avg.sort_values(by=['Building Name', 'Group', 'SubGroup'])
                 
                 # Calcular o "Proportional Peak Exception" (Exception = Y) diretamente no backend
-                df_merged_sorted_avg['Avg_Exc'] = df_merged_sorted_avg.apply(
-                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'],
-                    axis=1
-                )
-                df_merged_sorted_avg['CumSum Avg_Exc'] = df_merged_sorted_avg.groupby('Building Name')['Avg_Exc'].cumsum()
+                df_merged_sorted_avg['CumSum Avg_Exc'] = df_merged_sorted_avg.groupby('Building Name')['Avg Occ with Exception'].cumsum()
                 df_merged_sorted_avg['AvailableCumSum'] = df_merged_sorted_avg['Primary Work Seats'] - df_merged_sorted_avg['CumSum Avg_Exc']
 
                 # Lugares Disponíveis por Andar
@@ -1285,32 +1282,32 @@ def upload_arquivo():
                 df_avail_row_avgocc = pd.DataFrame([total_row_avgocc])
                 df_avail_avgocc = pd.concat([df_availability_avgocc, df_avail_row_avgocc], ignore_index=True)
                 df_avail_avgocc.rename(columns={"CumSum Avg_Exc" : "Total Avg Occ"}, inplace=True)
-                total_avgocc = df_merged_sorted_avg['Avg_Exc'].sum()
+                total_avgocc = df_merged_sorted_avg['Avg Occ with Exception'].sum()
 
                 # 3.1) % Alocados AVG OCC
-                allocated_avgocc = df_merged_sorted_avg[df_merged_sorted_avg['Building Name'] != 'Não Alocado']['Avg_Exc'].sum()
+                allocated_avgocc = df_merged_sorted_avg[df_merged_sorted_avg['Building Name'] != 'Não Alocado']['Avg Occ with Exception'].sum()
                 percent_allocated_avgocc = (allocated_avgocc / total_avgocc) * 100 if total_avgpeak > 0 else 0
                 percent_allocated_avgocc = percent_allocated_avgocc.round(0).astype(int)
 
                 # 3.2) Qtde Não Alocados AVG OCC
-                non_allocated_avgocc = df_merged_sorted_avg[df_merged_sorted_avg['Building Name'] == 'Não Alocado']['Avg_Exc'].sum()
+                non_allocated_avgocc = df_merged_sorted_avg[df_merged_sorted_avg['Building Name'] == 'Não Alocado']['Avg Occ with Exception'].sum()
                 non_aloccated_groups_avgocc = df_merged_sorted_avg[df_merged_sorted_avg['Building Name'] == 'Não Alocado']
-                non_aloccated_groups_avgocc = non_aloccated_groups_avgocc[["Group", "SubGroup", "Avg_Exc"]].sort_values(by=["Group", "SubGroup"])
+                non_aloccated_groups_avgocc = non_aloccated_groups_avgocc[["Group", "SubGroup", "Avg Occ with Exception"]].sort_values(by=["Group", "SubGroup"])
 
 
                 # 3.3 - GRÁFICO DE DONUT - AVG OCC
                 df_merged_sorted_avg['Status'] = df_merged_sorted_avg['Building Name'].apply(lambda x: 'Alocado' if x != 'Não Alocado' else 'Não Alocado')
                 # Agrupando o HeadCount por Status
-                avgocc_by_status = df_merged_sorted_avg.groupby('Status').agg({'Avg_Exc': 'sum'}).reset_index()
+                avgocc_by_status = df_merged_sorted_avg.groupby('Status').agg({'Avg Occ with Exception': 'sum'}).reset_index()
                 # Criando o gráfico de Donut com Plotly
                 figavgocc = px.pie(avgocc_by_status, 
                             names='Status', 
-                            values='Avg_Exc', 
+                            values='Avg Occ with Exception', 
                             title='',
                             hole=0.3,  # Cria o efeito de donut
                             color='Status',
                             color_discrete_map={"Alocado": "#00CFFF", "Não Alocado": "#FFAA33"},  # Definindo as cores
-                            labels={"Avg_Exc": "Total Avg Exc"})  # Renomeia o label no gráfico
+                            labels={"Avg Occ with Exception": "Total Avg Exc"})  # Renomeia o label no gráfico
                 # Adicionando os valores absolutos e percentuais como rótulos
                 figavgocc.update_traces(textinfo='percent+label', pull=[0.1, 0.1])  # Exibindo percentagem e label
                 figavgocc.update_layout(
@@ -1375,6 +1372,10 @@ def upload_arquivo():
                 st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
 
 
+
+
+
+
             #### DROPBOX PARA DEEP DIVE
                 # Adicionar um seletor para o usuário escolher qual tabela exibir
                 tabela_selecionada = st.selectbox(
@@ -1387,66 +1388,72 @@ def upload_arquivo():
                 if tabela_selecionada == "Automação HeadCount":
 
                 #### GRÁFICO DE AVG E PEAK
-                    # Calculando os totais para cada grupo
+                    #### GRÁFICO DE HEADCOUNT, PEAK e AVG OCC COM EXCEÇÃO
+
+                    # 1. Criar as colunas com exceção no DataFrame original (caso ainda não existam)
+                    df_merged_sorted_hc['Peak with Exception'] = df_merged_sorted_hc.apply(
+                        lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'],
+                        axis=1
+                    )
+                    df_merged_sorted_hc['Avg Occ with Exception'] = df_merged_sorted_hc.apply(
+                        lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'],
+                        axis=1
+                    )
+
+                    # 2. Agrupar por 'Group' somando os valores
                     df_grouped = df_merged_sorted_hc.groupby('Group').agg({
-                        'HeadCount': 'sum',                # Soma o total de HeadCount por Group
-                        'Proportional Peak': 'sum',        # Soma o Proportional Peak por Group
-                        'Proportional Avg': 'sum'          # Soma o Proportional Avg por Group
+                        'HeadCount': 'sum',
+                        'Peak with Exception': 'sum',
+                        'Avg Occ with Exception': 'sum'
                     }).reset_index()
+                    df_grouped = df_grouped.sort_values(by='HeadCount', ascending=False)
 
-                    # Calculando os percentuais
-                    df_grouped['Total Peak'] = (df_grouped['Proportional Peak'] / df_grouped['HeadCount']) * 100
-                    df_grouped['Total Avg'] = (df_grouped['Proportional Avg'] / df_grouped['HeadCount']) * 100
 
-                    # Reformulando para ter os cálculos em linhas
-                    df_melted = df_grouped.melt(id_vars=['Group'], value_vars=['Total Peak', 'Total Avg'], 
-                                                var_name='CalculationType', value_name='Percentage')
+                    # 3. Reformular para o formato "long", para facilitar a criação do gráfico de barras
+                    df_melted = df_grouped.melt(
+                        id_vars=['Group'], 
+                        value_vars=['HeadCount', 'Peak with Exception', 'Avg Occ with Exception'],
+                        var_name='Metric', 
+                        value_name='Value'
+                    )
 
-                    # Criando as colunas de texto específicas para cada tipo de cálculo
+                    # 4. (Opcional) Criar coluna de texto para exibir os valores dentro das barras
                     df_melted['text'] = df_melted.apply(
-                        lambda row: f"<b>{row['CalculationType']}:</b> {row['Percentage']:.1f}%" if row['Percentage'] > 0 else "", axis=1
+                        lambda row: f"<b>{row['Metric']}:</b> {row['Value']}" if row['Value'] > 0 else "", 
+                        axis=1
                     )
 
-                    # Criando o gráfico de barras
-                    fig = px.bar(df_melted, 
-                                x="Group", 
-                                y="Percentage", 
-                                color="CalculationType",  # Diferencia as barras pelo tipo de cálculo
-                                title="Distribuição do Percentual de HeadCount por Group",
-                                labels={"Percentage": "Percentual (%)", "Group": "Group", "CalculationType": "Cálculo"},
-                                color_discrete_map={"Total Peak": "#006400", "Total Avg": "#32CD32"},  # Verde escuro e verde claro
-                                text="text"  # Usando a coluna de texto específica para cada barra
-                                )
+                    # 5. Criar o gráfico de barras com Plotly Express
+                    fig = px.bar(
+                        df_melted, 
+                        x="Group", 
+                        y="Value", 
+                        color="Metric",               # Diferencia as barras pelo tipo de métrica
+                        title="Distribuição de HeadCount, Peak e Avg Occ por Group",
+                        labels={"Value": "Total", "Group": "Group", "Metric": "Métrica"},
+                        text="text"                   # Exibe o texto configurado para cada barra
+                    )
 
-                    # Habilitando interatividade no gráfico
+                    # 6. Ajustar o layout do gráfico
                     fig.update_layout(
-                        barmode='group',  # Barra agrupada (2 barras por grupo)
+                        barmode='group',             # Barras agrupadas
                         xaxis_title="Group",
-                        yaxis_title="Percentual (%)",
-                        yaxis=dict(range=[0, 100]),  # Fixando o limite do eixo Y em 100%
-                        legend_title="Tipo de Percentual",
-                        legend=dict(
-                            x=1.05,  # Posiciona a legenda à direita
-                            y=0.5,   # Ajuste vertical para que a legenda não sobreponha o gráfico
-                            traceorder="normal",  # Ordem de exibição das legendas
-                            orientation="v",  # Define a legenda na vertical
-                            title="Group"
-                        ),
-                        margin=dict(t=50, b=50, l=50, r=50),  # Ajustando as margens do gráfico
-                        plot_bgcolor="white",  # Cor de fundo do gráfico
-                        paper_bgcolor="white",  # Cor de fundo da área do gráfico
-                        width=800,  # Largura do gráfico
-                        height=450,  # Altura do gráfico
+                        yaxis_title="Total",
+                        legend_title="Métrica",
+                        margin=dict(t=50, b=50, l=50, r=50),
+                        plot_bgcolor="white",
+                        paper_bgcolor="white",
+                        width=800,
+                        height=450,
                     )
 
-                    # Adicionando os valores nas barras com texto HTML
-                    fig.update_traces(texttemplate='%{text}', textposition='inside')  # Exibe o texto dentro das barras
+                    # 7. Exibir os valores dentro das barras
+                    fig.update_traces(texttemplate='%{text}', textposition='inside')
 
-                    # Exibe o gráfico no Streamlit
+                    # 8. Exibir o gráfico no Streamlit
                     st.plotly_chart(fig)
+                    st.markdown("<br><br>", unsafe_allow_html=True)
 
-                    # Adiciona um espaço maior usando <br> no Markdown
-                    st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
 
 
                 #### DATAFRAME HEADCOUNT + DONUT POR GROUP     
@@ -1486,7 +1493,7 @@ def upload_arquivo():
                                         title="Distribuição de HeadCount por Alocação", 
                                         labels={"HeadCount": "Total HeadCount"},
                                         hover_data=["Building Name"],  # Exibe SubGroup ao passar o mouse
-                                        category_orders={"Building Name": df_merged_hc['Building Name'].unique()})  # Exibe todos os Buildings disponíveis
+                                        category_orders={"Building Name": sorted(df_merged_sorted_hc['Building Name'].unique())})  # Exibe todos os Buildings disponíveis
 
                         # Adicionando os valores nas barras com texto
                         barshc.update_traces(text=df_merged_sorted_hc_bars['HeadCount'], textposition='inside', texttemplate='%{text}')
