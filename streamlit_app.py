@@ -44,47 +44,11 @@ def upload_arquivo():
     st.write("### Leitura e Processamento de Abas do Excel")
 
     # Dividir a interface em abas
-    tabs = st.tabs(["Glossário", "Importar Arquivo", "Automação", "Cenarios", "Dashboards"])
-
-    with tabs[0]:
-        st.header("Glossário")
-        st.write("### **Para Importação do arquivo em Excel, é necessário que as abas estejam nesse padrão:**")
-
-        st.write("#### Aba 'Staff HeadCount:")
-        staffheadcountimage = Image.open("staffheadcountimage.PNG") 
-        st.image(staffheadcountimage, use_container_width=False) 
-        st.write(""" Assegurar que as informações estejam dispostas como na imagem:   
-                 - Cabeçalho estar na linha 4   
-                 - Preenchimento de informações entre colunas A à I, seguindo a ordem de preenchimento da imagem   
-            """)
-        
-        st.write("#### Aba 'Staff Occupancy:")
-        staffoccupancyimage = Image.open("staffoccupancyimage.PNG") 
-        st.image(staffoccupancyimage, use_container_width=False) 
-        st.write(""" Assegurar que as informações estejam dispostas como na imagem:   
-                 - Cabeçalho estar na linha 4   
-                 - Preenchimento de informações entre colunas A à F, seguindo a ordem de preenchimento da imagem   
-            """)
-        
-        st.write("#### Aba 'SubGroup Adjacencies:")
-        subgroupadjacenciesimage = Image.open("subgroupadjacenciesimage.PNG") 
-        st.image(subgroupadjacenciesimage, use_container_width=False) 
-        st.write(""" Assegurar que as informações estejam dispostas como na imagem:   
-                 - Cabeçalho estar na linha 4   
-                 - Preenchimento de informações entre colunas A à E, seguindo a ordem de preenchimento da imagem   
-            """)
-
-        st.write("#### Aba 'Building Space Summary:")
-        buildingspaceimage = Image.open("buildingspaceimage.PNG") 
-        st.image(buildingspaceimage, use_container_width=False) 
-        st.write(""" Assegurar que as informações estejam dispostas como na imagem:   
-                 - Cabeçalho estar na linha 7   
-                 - Preenchimento de informações entre colunas A à U, seguindo a ordem de preenchimento da imagem   
-            """)
+    tabs = st.tabs(["Importar Arquivo", "Automação", "Cenarios", "Dashboards"])
 
 
     ##### ABA IMPORTAÇÃO #####   
-    with tabs[1]:
+    with tabs[0]:
         st.header("Importar Arquivo")
         
         # Função para carregar e processar os dados do Excel
@@ -94,7 +58,7 @@ def upload_arquivo():
                 df_staffheadcount = pd.read_excel(file_path, sheet_name='2. Staff Headcount ', skiprows=3, usecols="A:I")
                 df_staffoccupancy = pd.read_excel(file_path, sheet_name='3. Staff Occupancy', skiprows=3, usecols="A:F")
                 df_subgroupadjacenties = pd.read_excel(file_path, sheet_name='4. SubGroup Adjacencies', skiprows=3, usecols="A:E")
-                df_building = pd.read_excel(file_path, sheet_name='5. Building Space Summary', skiprows=6, usecols="A:V")
+                df_building = pd.read_excel(file_path, sheet_name='5. Building Space Summary', skiprows=6, usecols="A:AC")
 
                 # Processar df_staffheadcount
                 rename_dfstaffheadcount = {
@@ -296,7 +260,7 @@ def upload_arquivo():
 
 
     ##### ABA AUTOMAÇÃO #####
-    with tabs[2]:
+    with tabs[1]:
         st.header("Automação")
         st.write("Para o cálculo de espaços está sendo considerado 'Primary Work Seats'.")
 
@@ -384,19 +348,42 @@ def upload_arquivo():
 
                 # Função de exibição de alocação com as tabelas ajustadas
                 def display_allocation(df_allocation, remaining_floors, df_building_trat):
-                    # Ordenar os dados por 'Building Name'
+                    # Reordenar as colunas: "Building Name" em 1ª posição e "Current Location" em última
+                    cols = df_allocation.columns.tolist()
+                    if "Building Name" in cols and "Current Location" in cols:
+                        new_order = (
+                            ["Building Name"] +
+                            [col for col in cols if col not in ("Building Name", "Current Location")] +
+                            ["Current Location"]
+                        )
+                        df_allocation = df_allocation[new_order]
+                    
+                    # Ordenar o DataFrame por "Building Name" se ainda não estiver ordenado
                     df_allocation = df_allocation.sort_values(by='Building Name')
+                    
+                    # Obter os Building Names únicos conforme a ordem do DataFrame (primeira ocorrência)
+                    unique_buildings = df_allocation["Building Name"].drop_duplicates().tolist()
+                    # Alternar entre cinza claro e sem fundo (transparente)
+                    building_colors = {building: "#D3D3D3" if i % 2 == 0 else "" 
+                                    for i, building in enumerate(unique_buildings)}
+                    
+                    def highlight_building(row):
+                        color = building_colors.get(row["Building Name"], "")
+                        return ['background-color: ' + color] * len(row)
+                    
                     st.write("#### Resultado da Automação - HeadCount")
-                    df_allocation_styled = df_allocation.style.applymap(lambda x: 'background-color: #D3D3D3', subset=['HeadCount'])
+                    df_allocation_styled = df_allocation.style.apply(highlight_building, axis=1)
                     st.dataframe(df_allocation_styled, use_container_width=False)
-
+                    
                     # Exibir a capacidade restante nos andares
                     st.write("#### Capacidade restante nos andares - HeadCount:")
-                    remaining_floors_df = pd.DataFrame(list(remaining_floors.items()), columns=['Building Name', 'Remaining Seats'])
+                    remaining_floors_df = pd.DataFrame(list(remaining_floors.items()), 
+                                                    columns=['Building Name', 'Remaining Seats'])
                     st.dataframe(remaining_floors_df, use_container_width=False)
-
-                    # Retornar o DataFrame modificado
+                    
+                    
                     return df_allocation, remaining_floors_df
+
 
                 # Carregar os dados e realizar a alocação
                 if "df_building_trat" in st.session_state and "df_proportional" in st.session_state:
@@ -418,6 +405,17 @@ def upload_arquivo():
 
                     # Exibir os resultados de alocação
                     df_allocation_result, remaining_floors_df_result = display_allocation(df_allocation, remaining_floors, df_building_trat)
+                    cols = df_allocation.columns.tolist()
+                    if "Building Name" in cols and "Current Location" in cols:
+                        new_order = (
+                            ["Building Name"] +
+                            [col for col in cols if col not in ("Building Name", "Current Location")] +
+                            ["Current Location"]
+                        )
+                        df_allocation = df_allocation[new_order]
+                    
+                    # Ordenar o DataFrame por "Building Name" se ainda não estiver ordenado
+                    df_allocation = df_allocation.sort_values(by='Building Name')
                     dfautomation_hc = df_allocation.copy()
                     st.session_state.dfautomation_hc = dfautomation_hc  # Salvando no session_state
 
@@ -517,27 +515,65 @@ def upload_arquivo():
                     
                     return df_allocation, floors
 
+                
                 # Função de exibição de alocação com as tabelas ajustadas
                 def display_allocation(df_allocation, remaining_floors, df_building_trat):
                     # Ordenar os dados por 'Building Name'
                     df_allocation = df_allocation.sort_values(by='Building Name')
                     st.write("#### Resultado da Automação - Peak")
-                    df_allocation['Peak with Exception'] = df_allocation.apply(lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'], axis=1)
+                    
+                    # Criar a coluna 'Peak with Exception' com base na condição
+                    df_allocation['Peak with Exception'] = df_allocation.apply(
+                        lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'], 
+                        axis=1
+                    )
+                    # Criar a nova coluna que calcula o % do HeadCount (multiplicado por 100)
+                    df_allocation['Peak % of HeadCount'] = ((df_allocation['Peak with Exception'] / df_allocation['HeadCount']) * 100).round(0).astype(int)
+                                        
+                    # Remover coluna que não será mais necessária e renomear
                     df_allocation.drop(columns=['Proportional Peak'], inplace=True)
-                    df_allocation.rename(columns={'Proportional Avg' : 'Avg Occ'}, inplace=True)
-                    df_allocation = df_allocation[['Current Location', 'Group', 'SubGroup', 'FTE', 'CW', 'Growth', 'HeadCount', 'Exception (Y/N)', 'Peak with Exception', 'Avg Occ', 'Adjacency Priority 1', 
-                                                   'Adjacency Priority 2', 'Adjacency Priority 3', 'Building Name']]
-                    df_allocation_styled = df_allocation.style.applymap(lambda x: 'background-color: #D3D3D3', subset=['Peak with Exception'])
+                    df_allocation.rename(columns={'Proportional Avg': 'Avg Occ'}, inplace=True)
+                    
+                    # Reordenar as colunas para que "Building Name" seja a 1ª e "Current Location" a última,
+                    # e inserir a nova coluna após "Peak with Exception"
+                    df_allocation = df_allocation[['Building Name', 'Group', 'SubGroup', 'FTE', 'CW', 'Growth', 
+                                                'HeadCount', 'Exception (Y/N)', 'Peak with Exception', 'Peak % of HeadCount',
+                                                'Avg Occ', 'Adjacency Priority 1', 'Adjacency Priority 2', 'Adjacency Priority 3', 
+                                                'Current Location']]
+                    
+                    # Obter os Building Names únicos na ordem de aparecimento (após o sort)
+                    unique_buildings = df_allocation['Building Name'].drop_duplicates().tolist()
+                    # Definir cores alternadas: cinza claro para índices pares e transparente para ímpares
+                    building_colors = {building: "#D3D3D3" if i % 2 == 0 else "" 
+                                    for i, building in enumerate(unique_buildings)}
+                    
+                    # Função para aplicar o estilo de fundo para cada linha, com base no Building Name
+                    def highlight_building(row):
+                        color = building_colors.get(row['Building Name'], '')
+                        return ['background-color: ' + color] * len(row)
+                    
+                    # Aplica o estilo alternado nas linhas e mantém a formatação específica para as colunas de Peak
+                    df_allocation_styled = (
+                        df_allocation
+                        .style.apply(highlight_building, axis=1)
+                        .applymap(lambda x: 'background-color: #D3D3D3', subset=['Peak with Exception', 'Peak % of HeadCount'])
+                    )
+                    
                     st.dataframe(df_allocation_styled, use_container_width=False)
-                    st.dataframe(df_allocation.fillna(""), use_container_width=False)
 
                     # Exibir a capacidade restante nos andares
                     st.write("#### Capacidade restante nos andares - Peak:")
-                    remaining_floors_df = pd.DataFrame(list(remaining_floors.items()), columns=['Building Name', 'Remaining Seats'])
+                    remaining_floors_df = pd.DataFrame(
+                        list(remaining_floors.items()), 
+                        columns=['Building Name', 'Remaining Seats']
+                    )
                     st.dataframe(remaining_floors_df, use_container_width=False)
 
                     # Retornar o DataFrame modificado
                     return df_allocation, remaining_floors_df
+
+
+            
 
                 # Carregar os dados e realizar a alocação
                 if "df_building_trat" in st.session_state and "df_proportional" in st.session_state:
@@ -559,6 +595,17 @@ def upload_arquivo():
 
                     # Exibir os resultados de alocação
                     df_allocation, remaining_floors_df = display_allocation(df_allocation, remaining_floors, df_building_trat)
+                    cols = df_allocation.columns.tolist()
+                    if "Building Name" in cols and "Current Location" in cols:
+                        new_order = (
+                            ["Building Name"] +
+                            [col for col in cols if col not in ("Building Name", "Current Location")] +
+                            ["Current Location"]
+                        )
+                        df_allocation = df_allocation[new_order]
+                    
+                    # Ordenar o DataFrame por "Building Name" se ainda não estiver ordenado
+                    df_allocation = df_allocation.sort_values(by='Building Name')
                     dfautomation_peak = df_allocation.copy()
                     st.session_state.dfautomation_peak = dfautomation_peak  # Salvando no session_state
 
@@ -570,6 +617,7 @@ def upload_arquivo():
                     total_row_df = pd.DataFrame([total_row])
                     df_peak_nonallocated_total = pd.concat([df_peak_nonallocated, total_row_df], ignore_index=True)
                     st.dataframe(df_peak_nonallocated_total, use_container_width=False)
+
 
                 # Botão para exportar tabela "Resultados das Simulações" para Excel
                 if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado_peak"):
@@ -638,8 +686,7 @@ def upload_arquivo():
                         if exception == 'Y':
                             headcount = group['HeadCount']
                         else:
-                            headcount = group['Proportional Avg']  # Use o valor de 'Proportional Peak' para o cálculo
-                        
+                            headcount = group['Proportional Avg']  # Use o valor de 'Proportional Peak' para o cálculo                        
                         allocated = False  # Flag para verificar se o grupo foi alocado
                         
                         # Tentar alocar o grupo nos andares disponíveis
@@ -662,20 +709,51 @@ def upload_arquivo():
                     # Ordenar os dados por 'Building Name'
                     df_allocation = df_allocation.sort_values(by='Building Name')
                     st.write("#### Resultado da Automação - Avg Occ")
-                    df_allocation['Avg Occ with Exception'] = df_allocation.apply(lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'], axis=1)
-                    # df_allocation.drop(columns=['Proportional Peak'], inplace=True)
-                    df_allocation = df_allocation[['Current Location', 'Group', 'SubGroup', 'FTE', 'CW', 'Growth', 'HeadCount', 'Exception (Y/N)', 'Avg Occ with Exception', 'Adjacency Priority 1', 
-                                                   'Adjacency Priority 2', 'Adjacency Priority 3', 'Building Name']]
-                    df_allocation_styled = df_allocation.style.applymap(lambda x: 'background-color: #D3D3D3', subset=['Avg Occ with Exception'])
+                    
+                    # Criar a coluna 'Avg Occ with Exception'
+                    df_allocation['Avg Occ with Exception'] = df_allocation.apply(
+                        lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'], 
+                        axis=1
+                    )
+                    # Criar a nova coluna que calcula o % do HeadCount (multiplicado por 100)
+                    df_allocation['Avg Occ % of HeadCount'] = ((df_allocation['Avg Occ with Exception'] / df_allocation['HeadCount']) * 100).round(0).astype(int)
+                    
+                    # Reordenar as colunas para que "Building Name" seja a 1ª e "Current Location" a última
+                    df_allocation = df_allocation[['Building Name', 'Group', 'SubGroup', 'FTE', 'CW', 'Growth', 
+                                                'HeadCount', 'Exception (Y/N)', 'Avg Occ with Exception', 'Avg Occ % of HeadCount',
+                                                'Adjacency Priority 1', 'Adjacency Priority 2', 'Adjacency Priority 3', 
+                                                'Current Location']]
+                    
+                    # Obter os Building Names únicos na ordem de aparição (após o sort)
+                    unique_buildings = df_allocation['Building Name'].drop_duplicates().tolist()
+                    # Definir cores alternadas: cinza claro (#D3D3D3) para índices pares e transparente para ímpares
+                    building_colors = {building: "#D3D3D3" if i % 2 == 0 else "" 
+                                    for i, building in enumerate(unique_buildings)}
+                    
+                    # Função para aplicar o estilo de fundo para cada linha, com base no Building Name
+                    def highlight_building(row):
+                        color = building_colors.get(row['Building Name'], '')
+                        return ['background-color: ' + color] * len(row)
+                    
+                    # Aplica o estilo alternado nas linhas e formata a coluna "Avg Occ with Exception" com o fundo fixo
+                    df_allocation_styled = (
+                        df_allocation
+                        .style.apply(highlight_building, axis=1)
+                        .applymap(lambda x: 'background-color: #D3D3D3', subset=['Avg Occ with Exception', 'Avg Occ % of HeadCount'])
+                    )
+                    
                     st.dataframe(df_allocation_styled, use_container_width=False)
-                    st.dataframe(df_allocation.fillna(""), use_container_width=False)
 
                     # Exibir a capacidade restante nos andares
                     st.write("#### Capacidade restante nos andares - Avg:")
-                    remaining_floors_df = pd.DataFrame(list(remaining_floors.items()), columns=['Building Name', 'Remaining Seats'])
+                    remaining_floors_df = pd.DataFrame(
+                        list(remaining_floors.items()), 
+                        columns=['Building Name', 'Remaining Seats']
+                    )
                     st.dataframe(remaining_floors_df, use_container_width=False)
 
                     return df_allocation, remaining_floors_df
+
 
                 # Carregar os dados e realizar a alocação
                 if "df_building_trat" in st.session_state and "df_proportional" in st.session_state:
@@ -697,6 +775,17 @@ def upload_arquivo():
 
                     # Exibir os resultados de alocação
                     df_allocation, remaining_floors_df = display_allocation(df_allocation, remaining_floors, df_building_trat)
+                    cols = df_allocation.columns.tolist()
+                    if "Building Name" in cols and "Current Location" in cols:
+                        new_order = (
+                            ["Building Name"] +
+                            [col for col in cols if col not in ("Building Name", "Current Location")] +
+                            ["Current Location"]
+                        )
+                        df_allocation = df_allocation[new_order]
+                    
+                    # Ordenar o DataFrame por "Building Name" se ainda não estiver ordenado
+                    df_allocation = df_allocation.sort_values(by='Building Name')
                     dfautomation_avg = df_allocation.copy()
                     st.session_state.dfautomation_avg = dfautomation_avg  # Salvando no session_state
 
@@ -737,7 +826,7 @@ def upload_arquivo():
 
 
    ##### ABA CENÁRIOS #####
-    with tabs[3]:
+    with tabs[2]:
         st.write("### Cenários de Alocação")
 
         # Inicializar df_proportional como um DataFrame vazio, se não houver dados na sessão
@@ -745,18 +834,48 @@ def upload_arquivo():
             df_proportional = pd.DataFrame()  # DataFrame vazio
         else:
             df_proportional = st.session_state.df_proportional
+
+        if not df_proportional.empty:
+            # Criação da tabela de cenários para "Informações Cadastradas"
+            df_proportional_cenarios = df_proportional.copy()
+            df_proportional_cenarios = df_proportional_cenarios[[
+                "Group", "SubGroup", "Exception (Y/N)", "HeadCount", "Proportional Peak", "Proportional Avg"
+            ]]
+            df_proportional_cenarios.rename(
+                columns={
+                    "HeadCount": "1:1", 
+                    "Proportional Peak": "Peak", 
+                    "Proportional Avg": "Avg Occ"
+                },
+                inplace=True
+            )
+
+            with st.expander("#### **Informações Cadastradas**"):
+                # Selectbox dentro do expander para escolha da visualização
+                view_option = st.selectbox(
+                    "Selecione a visualização:",
+                    options=["Meu cenário", "Automação HeadCount", "Automação Peak", "Automação Avg Occ"]
+                )
+
+                if view_option == "Meu cenário":
+                    st.dataframe(df_proportional_cenarios, use_container_width=False, hide_index=True)
+                elif view_option == "Automação HeadCount":
+                    if "dfautomation_hc" in st.session_state:
+                        st.dataframe(st.session_state.dfautomation_hc, use_container_width=False, hide_index=True)
+                    else:
+                        st.info("Tabela de Automação HeadCount não disponível.")
+                elif view_option == "Automação Peak":
+                    if "dfautomation_peak" in st.session_state:
+                        st.dataframe(st.session_state.dfautomation_peak, use_container_width=False, hide_index=True)
+                    else:
+                        st.info("Tabela de Automação Peak não disponível.")
+                elif view_option == "Automação Avg Occ":
+                    if "dfautomation_avg" in st.session_state:
+                        st.dataframe(st.session_state.dfautomation_avg, use_container_width=False, hide_index=True)
+                    else:
+                        st.info("Tabela de Automação Avg Occ não disponível.")
             
 
-        # Verificar se o df_proportional tem dados antes de continuar
-        if not df_proportional.empty:
-            # Criação da tabela de cenários
-            df_proportional_cenarios = df_proportional.copy()
-            df_proportional_cenarios = df_proportional_cenarios[["Group", "SubGroup", "Exception (Y/N)", "HeadCount", "Proportional Peak", "Proportional Avg"]]
-            df_proportional_cenarios.rename(columns={"HeadCount": "1:1", "Proportional Peak": "Peak", "Proportional Avg": "Avg Occ"}, inplace=True)
-            with st.expander(f"#### **Informações Cadastradas**"):
-                st.dataframe(df_proportional_cenarios, use_container_width=False, hide_index=True)
-            
-        
 
             # Criação da tabela de cenários
             df_proportional_cenarios = df_proportional.copy()
@@ -1042,7 +1161,7 @@ def upload_arquivo():
 
 
    ##### ABA DASHBOARDS #####
-    with tabs[4]:
+    with tabs[3]:
         st.write("### DASHBOARDS")
 
         # Inicializar dfautomation_hc como um DataFrame vazio, se não houver dados na sessão
