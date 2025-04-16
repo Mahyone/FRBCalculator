@@ -132,6 +132,7 @@ def upload_arquivo():
 
                 df_building.rename(columns={df_building.columns[0]: 'Building Name'}, inplace=True)
                 df_building.rename(columns={df_building.columns[1]: 'Primary Work Seats'}, inplace=True)
+                df_building.rename(columns={df_building.columns[27]: 'Primary Work Seats'}, inplace=True)
 
                 for col in df_building.columns:
                     if col != 'Building Name':
