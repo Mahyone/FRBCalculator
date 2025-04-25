@@ -132,6 +132,7 @@ def upload_arquivo():
 
                 df_building.rename(columns={df_building.columns[0]: 'Building Name'}, inplace=True)
                 df_building.rename(columns={df_building.columns[1]: 'Primary Work Seats'}, inplace=True)
+                df_building.rename(columns={df_building.columns[7]: 'Alternative Work Seats'}, inplace=True)
                 df_building.rename(columns={df_building.columns[27]: 'Total seats on floor'}, inplace=True)
 
                 for col in df_building.columns:
@@ -262,17 +263,17 @@ def upload_arquivo():
 
 
     ##### ABA AUTOMAÇÃO #####
+    
     with tabs[1]:
         st.header("Automação")
         st.write("Para o cálculo de espaços está sendo considerado 'Primary Work Seats'.")
 
-        # Inicializar df_proportional como um DataFrame vazio, se não houver dados na sessão
-        if "df_building_trat" not in st.session_state and "df_proportional" not in st.session_state:
-            df_building_trat = pd.DataFrame()     
-            df_proportional = pd.DataFrame()  
-        else:
-            df_building_trat = st.session_state.df_building_trat
-            df_proportional = st.session_state.df_proportional
+        # Carrega os dados
+        df_building_trat = st.session_state.get('df_building_trat', pd.DataFrame())
+        df_proportional  = st.session_state.get('df_proportional', pd.DataFrame())
+        if df_building_trat.empty or df_proportional.empty:
+            st.info("Carregue primeiro os dados em 'Building' e 'Proportional'.")
+            st.stop()
 
         # Verificar se o df_proportional tem dados antes de continuar
         if not df_building_trat.empty and not df_proportional.empty:
@@ -303,626 +304,269 @@ def upload_arquivo():
 
 
 
+        # Prepara dicionário de capacidade
+        floors0 = dict(zip(df_building_trat['Building Name'], df_building_trat['Primary Work Seats']))
 
-            with st.expander("### Automação considerando HeadCount"):
-                primary_work_seats = df_building_trat_total['Primary Work Seats'].iloc[-1].astype(int)
-                total_seats_on_floor = df_building_trat_total['Total seats on floor'].iloc[-1].astype(int)
-                total_headcount = df_proportional["HeadCount"].sum()
-                    
-                st.write(f"**Primary Work Seats**: {primary_work_seats} || **Total seats on floor**: {total_seats_on_floor}")
-                st.write(f"**Total HeadCount**: {total_headcount}")
-
-                # Função de alocação dos grupos nos andares
-                def allocate_groups(df_proportional, floors):
-                    allocation = {}  # Armazenar a alocação de grupos por andar
-                    remaining_groups = df_proportional.sort_values(by='HeadCount', ascending=False)  # Ordenar por HeadCount
-                    floor_names = list(floors.keys())
-                    
-                    # Copiar df_proportional para adicionar a coluna 'Building Name'
-                    df_allocation = df_proportional.copy()
-                    df_allocation['Building Name'] = 'Não Alocado'  # Coluna inicializada com valor "Não Alocado"
-                    
-                    # Criar um valor único para grupos sem SubGrupo
-                    df_allocation['SubGroup'] = df_allocation['SubGroup'].fillna('NoSubGroup')
-                    
-                    # Alocar os grupos nos andares disponíveis
-                    for _, group in remaining_groups.iterrows():
-                        group_name = group['Group']
-                        subgroup_name = group['SubGroup']
-                        headcount = group['HeadCount']
-                        
-                        allocated = False  # Flag para verificar se o grupo foi alocado
-                        
-                        # Tentar alocar o grupo nos andares disponíveis
-                        for floor_name in floor_names:
-                            if floors[floor_name] >= headcount:
-                                # Se couber, aloca
-                                df_allocation.loc[(df_allocation['Group'] == group_name) & (df_allocation['SubGroup'] == subgroup_name), 'Building Name'] = floor_name
-                                floors[floor_name] -= headcount
-                                allocated = True  # Grupo foi alocado
-                                break
-                        
-                        # Se não alocou, marca como "Não Alocado"
-                        if not allocated:
-                            df_allocation.loc[(df_allocation['Group'] == group_name) & (df_allocation['SubGroup'] == subgroup_name), 'Building Name'] = 'Não Alocado'
-                    
-                    return df_allocation, floors
-
-                # Função de exibição de alocação com as tabelas ajustadas
-                def display_allocation(df_allocation, remaining_floors, df_building_trat):
-                    # Reordena colunas e ordena
-                    cols = df_allocation.columns.tolist()
-                    if "Building Name" in cols and "Current Location" in cols:
-                        new_order = (["Building Name"] +
-                                    [c for c in cols if c not in ("Building Name", "Current Location")] +
-                                    ["Current Location"])
-                        df_allocation = df_allocation[new_order]
-                    df_allocation = df_allocation.sort_values("Building Name")
-
-                        # Calcula subtotais (Alocados vs Não Alocados)
-                    num_cols = df_allocation.select_dtypes(include="number").columns.tolist()
-
-                    # Calcula subtotais
-                    alocados      = df_allocation[df_allocation["Building Name"] != "Não Alocado"]
-                    nao_alocados  = df_allocation[df_allocation["Building Name"] == "Não Alocado"]
-
-                    soma_alocados = alocados[num_cols].sum()
-                    soma_alocados["Building Name"] = "Alocados"
-
-                    soma_nao      = nao_alocados[num_cols].sum()
-                    soma_nao["Building Name"] = "Não Alocados"
-
-                    # **Novo: calcula Total Geral**
-                    soma_geral    = df_allocation[num_cols].sum()
-                    soma_geral["Building Name"] = "Total Geral"
-
-                    # Constrói DataFrame de subtotais + total geral
-                    df_subtotais = pd.DataFrame(
-                        [soma_alocados, soma_nao, soma_geral],
-                        columns=df_allocation.columns
-                    )
-
-                    # Concatena original + subtotais
-                    df_tot = pd.concat([df_allocation, df_subtotais], ignore_index=True)
-
-                        # Cria map de cores alternadas por prédio
-                    unique_buildings = df_allocation["Building Name"].drop_duplicates().tolist()
-                    building_colors = {
-                        b: "#D3D3D3" if i % 2 == 0 else ""
-                        for i, b in enumerate(unique_buildings)
-                    }
-
-                        # Função única de highlight (inclui subtotais em cinza médio + negrito
-                    def highlight_rows(row):
-                        name = row['Building Name']
-                        if name == 'Total Geral':
-                            # Azul petróleo escuro + texto em branco
-                            return ['background-color: #004E64; color: #FFFFFF'] * len(row)
-                        if name in ('Alocados', 'Não Alocados'):
-                            # Tom mais claro do azul petróleo + texto em branco
-                            return ['background-color: #357A91; color: #FFFFFF'] * len(row)
-                        # linhas originais continuam com cinza claro alternado
-                        color = building_colors.get(name, '')
-                        return [f'background-color: {color}'] * len(row)
-
-                    st.write("#### Resultado da Automação - HeadCount")
-                    styled = df_tot.style.apply(highlight_rows, axis=1)
-                    st.dataframe(styled, use_container_width=False)
-
-                        # Tabela de capacidade + ocupados + restante
-                    cap = (
-                        df_building_trat[["Building Name", "Primary Work Seats"]]
-                        .rename(columns={"Primary Work Seats": "Capacity"})
-                    )
-                    rem_df = (
-                        pd.DataFrame(list(remaining_floors.items()), columns=["Building Name", "Remaining"])
-                        .merge(cap, on="Building Name", how="left")
-                    )
-                    rem_df["Occupied"] = rem_df["Capacity"] - rem_df["Remaining"]
-                    rem_df = rem_df[["Building Name", "Capacity", "Occupied", "Remaining"]]
-
-                    st.write("#### Capacidade restante nos andares - HeadCount:")
-                    st.dataframe(rem_df, use_container_width=False)
-
-                    return df_tot, rem_df
-
-
-                # Carregar os dados e realizar a alocação
-                if "df_building_trat" in st.session_state and "df_proportional" in st.session_state:
-                    df_building_trat = st.session_state.df_building_trat
-                    df_proportional = st.session_state.df_proportional
-
-                    # Exibir as tabelas para debug
-                    #st.write("### Tabela 'Building Space Summary'")
-                    #st.dataframe(df_building_trat, use_container_width=False)
-                    
-                    #st.write("### Tabela 'Grupos, SubGrupos e Adjacentes'")
-                    #st.dataframe(df_proportional, use_container_width=False)
-
-                    # Extração da capacidade dos andares do df_building_trat
-                    floors = dict(zip(df_building_trat['Building Name'], df_building_trat['Primary Work Seats']))
-
-                    # Chamar a função de alocação
-                    df_allocation, remaining_floors = allocate_groups(df_proportional, floors.copy())
-
-                    # Exibir os resultados de alocação
-                    df_allocation_result, remaining_floors_df_result = display_allocation(df_allocation, remaining_floors, df_building_trat)
-                    cols = df_allocation.columns.tolist()
-                    if "Building Name" in cols and "Current Location" in cols:
-                        new_order = (
-                            ["Building Name"] +
-                            [col for col in cols if col not in ("Building Name", "Current Location")] +
-                            ["Current Location"]
+        # Função genérica de alocação com adjacentes
+        def allocate_with_adj(df, floors, eff_col):
+            df2 = df.copy().reset_index(drop=True)
+            df2['Building Name'] = 'Não Alocado'
+            df2['SubGroup'] = df2['SubGroup'].fillna('NoSubGroup')
+            for idx, row in df2.sort_values(eff_col, ascending=False).iterrows():
+                if df2.at[idx,'Building Name']!='Não Alocado': continue
+                # monta lote principal + adjacentes
+                lote = [idx]
+                for adj_col in ['Adjacency Priority 1','Adjacency Priority 2','Adjacency Priority 3']:
+                    adj = row.get(adj_col)
+                    if pd.notna(adj):
+                        mask = (
+                            (df2['Group']==row['Group']) &
+                            (df2['SubGroup']==adj) &
+                            (df2['Building Name']=='Não Alocado')
                         )
-                        df_allocation = df_allocation[new_order]
-                    
-                    # Ordenar o DataFrame por "Building Name" se ainda não estiver ordenado
-                    df_allocation = df_allocation.sort_values(by='Building Name')
-                    dfautomation_hc = df_allocation.copy()
-                    st.session_state.dfautomation_hc = dfautomation_hc  # Salvando no session_state
+                        lote += df2.index[mask].tolist()
+                soma = df2.loc[lote, eff_col].sum()
+                # tenta em bloco
+                coloc = False
+                for fl, cap in floors.items():
+                    if cap >= soma:
+                        df2.loc[lote,'Building Name'] = fl
+                        floors[fl] -= soma
+                        coloc = True
+                        break
+                # fallback só principal
+                if not coloc:
+                    hc = int(row[eff_col])
+                    for fl, cap in floors.items():
+                        if cap >= hc:
+                            df2.at[idx,'Building Name'] = fl
+                            floors[fl] -= hc
+                            break
+            return df2, floors
 
-                    st.write("#### Grupos Não Alocados:")
-                    df_hc_nonallocated = df_allocation_result[df_allocation_result['Building Name'] == 'Não Alocado']
-                    numeric_columns = df_hc_nonallocated.select_dtypes(include='number').columns
-                    total_row = df_hc_nonallocated[numeric_columns].sum()
-                    total_row['Building Name'] = 'Total' 
-                    total_row_df = pd.DataFrame([total_row])
-                    df_hc_nonallocated_with_total = pd.concat([df_hc_nonallocated, total_row_df], ignore_index=True)
-                    
-                    def highlight_nonalloc_total(row):
-                        if row["Building Name"] == "Total":
-                            return ['background-color: #004E64; color: #FFFFFF'] * len(row)
-                        return [""] * len(row)
+        # Função genérica de exibição
+        def display_generic(df_alloc, floors_rem, dfb, key_col):
+            # -- subtotais e estilo igual ao HeadCount --
+            cols = df_alloc.columns.tolist()
+            if "Current Location" in cols:
+                df_alloc = df_alloc[["Building Name"] + [c for c in cols if c not in ("Building Name","Current Location")] + ["Current Location"]]
+            df_alloc = df_alloc.sort_values("Building Name")
+            num_cols = df_alloc.select_dtypes("number").columns
+            a = df_alloc[df_alloc["Building Name"]!="Não Alocado"]
+            na = df_alloc[df_alloc["Building Name"]=="Não Alocado"]
+            soma_a = a[num_cols].sum();      soma_a["Building Name"]="Alocados"
+            soma_na= na[num_cols].sum();     soma_na["Building Name"]="Não Alocados"
+            soma_t = df_alloc[num_cols].sum();soma_t["Building Name"]="Total Geral"
+            df_tot = pd.concat([df_alloc, pd.DataFrame([soma_a,soma_na,soma_t])], ignore_index=True)
 
-                    styled_non = df_hc_nonallocated_with_total.style.apply(highlight_nonalloc_total, axis=1)
-                    st.dataframe(styled_non, use_container_width=False)
+            # cabeçalho
+            st.write(f"#### Resultado da Automação - {key_col}")
+            def hl(r):
+                n = r["Building Name"]
+                if n=="Total Geral":   return ["background:#004E64;color:white"]*len(r)
+                if n in ("Alocados","Não Alocados"): return ["background:#357A91;color:white"]*len(r)
+                return [""]*len(r)
+            st.dataframe(df_tot.style.apply(hl,axis=1), use_container_width=False)
 
-                    ## st.dataframe(df_hc_nonallocated_with_total, use_container_width=False)
+            # -- capacidade restante pelo Primary Work Seats --
+            cap = dfb[["Building Name","Primary Work Seats"]].rename(columns={"Primary Work Seats":"Capacity"})
+            occ = (
+                df_alloc[df_alloc["Building Name"]!="Não Alocado"]
+                .groupby("Building Name")[key_col].sum()
+                .reset_index(name="Occupied")
+            )
+            rem = cap.merge(occ, on="Building Name", how="left").fillna(0)
+            rem["Remaining"] = (rem["Capacity"] - rem["Occupied"]).clip(lower=0)
+            tot = rem[["Capacity","Occupied","Remaining"]].sum(); tot["Building Name"]="Total Geral"
+            rem = pd.concat([rem, pd.DataFrame([tot])], ignore_index=True)
 
+            st.write(f"#### Capacidade restante nos andares - {key_col}:")
+            st.dataframe(
+                rem.style.apply(lambda r: ['background:#004E64;color:white']*len(r) if r["Building Name"]=="Total Geral" else ['']*len(r),
+                                axis=1),
+                use_container_width=False
+            )
+            return df_tot, rem
 
-                # Botão para exportar tabela "Resultados das Simulações" para Excel
-                if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado"):
-                    if "dfautomation_hc" in st.session_state:
-                        # Acessa o DataFrame salvo no session_state e substitui NaN por string vazia
-                        df_allocation_export = st.session_state.dfautomation_hc.fillna("")
-                        
-                        # Cria o arquivo Excel em memória
-                        output = io.BytesIO()
-                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                            df_allocation_export.to_excel(writer, sheet_name="Simulações HC", index=False)
-                        output.seek(0)
-                        
-                        # Botão de download, utilizando output.getvalue() para retornar os bytes do arquivo
-                        st.download_button(
-                            label="Download do Excel - Resultados das Simulações HeadCount",
-                            data=output.getvalue(),
-                            file_name="resultados_simulacoes_hc.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                    else:
-                        st.error("Data not found: 'dfautomation_hc' não está disponível no session_state.")
+        # Define os 3 cenários
+        scenarios = [
+            {"title":"HeadCount", "eff_col":"HeadCount"},
+            {"title":"Peak",      "eff_col":"Peak with Exception"},
+            {"title":"Avg Occ",   "eff_col":"Avg Occ with Exception"}
+        ]
 
-                    
+        # Prepara coluna efetiva em df_proportional para cada cenário
+        dfp = df_proportional.copy()
+        # Peak exception
+        dfp["Peak with Exception"] = dfp.apply(lambda r: r["HeadCount"] if r["Exception (Y/N)"]=="Y" else r["Proportional Peak"], axis=1)
+        # Avg Occ exception
+        dfp["Avg Occ with Exception"] = dfp.apply(lambda r: r["HeadCount"] if r["Exception (Y/N)"]=="Y" else r["Proportional Avg"], axis=1)
 
-            with st.expander("### Automação considerando Peak"):
-                st.write("Para os Groups + SubGroups que são 'Exception = Y' o valor considerado é Headcount - 1:1.")
+        # Loop pelos cenários
+        cols_map = {
+            "HeadCount": [
+                "Building Name","Group","SubGroup","FTE","CW","Growth",
+                "HeadCount","Exception (Y/N)",
+                "Proportional Peak","Proportional Avg",
+                "Adjacency Priority 1","Adjacency Priority 2","Adjacency Priority 3",
+                "Current Location"
+            ],
+            "Peak": [
+                "Building Name","Group","SubGroup","FTE","CW","Growth",
+                "HeadCount","Exception (Y/N)",
+                "Peak with Exception","Peak % of HeadCount",
+                "Proportional Avg",
+                "Adjacency Priority 1","Adjacency Priority 2","Adjacency Priority 3",
+                "Current Location"
+            ],
+            "Avg Occ": [
+                "Building Name","Group","SubGroup","FTE","CW","Growth",
+                "HeadCount","Exception (Y/N)",
+                "Avg Occ with Exception","Avg Occ % of HeadCount",
+                "Adjacency Priority 1","Adjacency Priority 2","Adjacency Priority 3",
+                "Current Location"
+            ]
+        }
 
-                primary_work_seats = df_building_trat_total['Primary Work Seats'].iloc[-1].astype(int)
-                total_seats_on_floor = df_building_trat_total['Total seats on floor'].iloc[-1].astype(int)
-                total_proppeak = df_proportional["Proportional Peak"].sum()
-                    
-                st.write(f"**Primary Work Seats**: {primary_work_seats} || **Total seats on floor**: {total_seats_on_floor}")
+        
+        primary_work_seats     = int(df_building_trat['Primary Work Seats'].sum())
+        alternative_work_seats = int(df_building_trat['Alternative Work Seats'].sum())
+        total_seats_on_floor   = int(df_building_trat['Total seats on floor'].sum())
 
-                # Calcular o "Proportional Peak Exception" (Exception = Y) diretamente no backend
-                total_proportional_Peak_exception = df_proportional.apply(
-                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Peak'],
+        for sc in scenarios:
+            title   = sc["title"]
+            eff_col = sc["eff_col"]
+
+            with st.expander(f"### Automação considerando {title}"):
+                # 0) cabeçalho de capacidades
+                st.write(
+                    f"**Primary Work Seats**: {primary_work_seats}  ||  "
+                    f"**Alternative Work Seats**: {alternative_work_seats}  ||  "
+                    f"**Total seats on floor**: {total_seats_on_floor}"
+                )
+
+                # 0.1) totais específicos de Peak/Avg Occ
+                if title == "Peak":
+                    total_pp = int(df_proportional["Proportional Peak"].sum())
+                    total_pp_exc = int(dfp["Peak with Exception"].sum())
+                    st.write(f"**Peak**: {total_pp}  ||  **Peak with Exception**: {total_pp_exc}")
+                elif title == "Avg Occ":
+                    total_pa = int(df_proportional["Proportional Avg"].sum())
+                    total_pa_exc = int(dfp["Avg Occ with Exception"].sum())
+                    st.write(f"**Avg Occ**: {total_pa}  ||  **Avg Occ with Exception**: {total_pa_exc}")
+                else:  # HeadCount
+                    st.write(f"**HeadCount**: {int(dfp['HeadCount'].sum())}")
+
+                # 1) alocar
+                floors = floors0.copy()
+                df_alloc, floors_rem = allocate_with_adj(dfp, floors, eff_col)
+
+                # 2) criar as colunas de exception e percentuais (já existia)
+                df_alloc["Peak with Exception"]     = df_alloc.apply(
+                    lambda r: r["HeadCount"] if r["Exception (Y/N)"]=="Y" else r["Proportional Peak"],
                     axis=1
-                ).sum()
+                )
+                df_alloc["Peak % of HeadCount"]     = (
+                    df_alloc["Peak with Exception"] / df_alloc["HeadCount"] * 100
+                ).round(0).astype(int)
+                df_alloc["Avg Occ with Exception"]  = df_alloc.apply(
+                    lambda r: r["HeadCount"] if r["Exception (Y/N)"]=="Y" else r["Proportional Avg"],
+                    axis=1
+                )
+                df_alloc["Avg Occ % of HeadCount"]  = (
+                    df_alloc["Avg Occ with Exception"] / df_alloc["HeadCount"] * 100
+                ).round(0).astype(int)
 
-                # Exibir o valor total
-                st.write(f"**Total Avg Peak**: {total_proppeak} || **Total Avg Peak with Exception**: {total_proportional_Peak_exception}")
 
+                # 3) Extrair só as colunas desejadas
+                cols = cols_map[title]
+                df_display = df_alloc[cols]
 
-                def allocate_groups_peak(df_proportional, floors):
-                    allocation = {}  # Armazenar a alocação de grupos por andar
-                    remaining_groups = df_proportional.sort_values(by='HeadCount', ascending=False)  # Ordenar por HeadCount
-                    floor_names = list(floors.keys())
-                    
-                    # Copiar df_proportional para adicionar a coluna 'Building Name'
-                    df_allocation = df_proportional.copy()
-                    df_allocation['Building Name'] = 'Não Alocado'  # Coluna inicializada com valor "Não Alocado"
-                    
-                    # Criar um valor único para grupos sem SubGrupo
-                    df_allocation['SubGroup'] = df_allocation['SubGroup'].fillna('NoSubGroup')
-                    
-                    # Alocar os grupos nos andares disponíveis
-                    for _, group in remaining_groups.iterrows():
-                        group_name = group['Group']
-                        subgroup_name = group['SubGroup']
-                        
-                        # Verificar se há exceção (se a coluna 'Exception' é 'Y')
-                        exception = group['Exception (Y/N)']  # Ajuste o nome da coluna conforme necessário
-                        
-                        # Se houver uma exceção (Exception = 'Y'), usar HeadCount; caso contrário, usar Proportional Peak
-                        if exception == 'Y':
-                            headcount = group['HeadCount']
-                        else:
-                            headcount = group['Proportional Peak']  # Use o valor de 'Proportional Peak' para o cálculo
-                        
-                        allocated = False  # Flag para verificar se o grupo foi alocado
-                        
-                        # Tentar alocar o grupo nos andares disponíveis
-                        for floor_name in floor_names:
-                            if floors[floor_name] >= headcount:
-                                # Se couber, aloca
-                                df_allocation.loc[(df_allocation['Group'] == group_name) & (df_allocation['SubGroup'] == subgroup_name), 'Building Name'] = floor_name
-                                floors[floor_name] -= headcount
-                                allocated = True  # Grupo foi alocado
-                                break
-                        
-                        # Se não alocou, marca como "Não Alocado"
-                        if not allocated:
-                            df_allocation.loc[(df_allocation['Group'] == group_name) & (df_allocation['SubGroup'] == subgroup_name), 'Building Name'] = 'Não Alocado'
-                    
-                    return df_allocation, floors
+                # === 3.1) Ordena e arredonda df_display ===
+                df_display = df_display.sort_values(
+                    ["Building Name","Group","SubGroup"], ascending=True
+                )
+                num_cols_disp = df_display.select_dtypes("number").columns
+                df_display[num_cols_disp] = df_display[num_cols_disp].round(0).astype(int)
+
+                # 4) subtotais + total geral
+                num_cols = df_display.select_dtypes("number").columns
+                grp_a    = df_display[df_display["Building Name"]!="Não Alocado"]
+                grp_na   = df_display[df_display["Building Name"]=="Não Alocado"]
+                soma_a   = grp_a[num_cols].sum();   soma_a["Building Name"]="Alocados"
+                soma_na  = grp_na[num_cols].sum();  soma_na["Building Name"]="Não Alocados"
+                soma_t   = df_display[num_cols].sum();soma_t["Building Name"]="Total Geral"
+                df_tot = pd.concat([df_display, pd.DataFrame([soma_a, soma_na, soma_t])], ignore_index=True)
+                num_cols_tot = df_tot.select_dtypes("number").columns
+                df_tot[num_cols_tot] = df_tot[num_cols_tot].round(0).astype(int)
+
+                # 5) Estilização única
+                unique_b = df_display["Building Name"].drop_duplicates().tolist()
+                building_colors = {b: "#D3D3D3" if i%2==0 else "" for i,b in enumerate(unique_b)}
+
+                def highlight_rows(row):
+                    name = row["Building Name"]
+                    if name == "Total Geral":
+                        return ["background-color: #004E64; color: white"] * len(row)
+                    if name in ("Alocados","Não Alocados"):
+                        return ["background-color: #357A91; color: white"] * len(row)
+                    return [f"background-color: {building_colors.get(name,'')};"] * len(row)
+
+                # **Adicione isto antes de usar highlight_total**
+                def highlight_total(row):
+                    if row["Building Name"] == "Total Geral":
+                        return ["background-color: #004E64; color: white"] * len(row)
+                    return [""] * len(row)
+
+                # 6) exibir alocação completa
+                st.write(f"#### Resultado da Automação - {title}")
+                st.dataframe(df_tot.style.apply(highlight_rows,axis=1), hide_index=True)
+
+                # 7) capacidade restante
+                st.write(f"#### Capacidade restante nos andares - {title}:")
+                cap = (
+                    df_building_trat[["Building Name","Primary Work Seats"]]
+                    .rename(columns={"Primary Work Seats":"Capacity"})
+                )
+                occ = (
+                    df_alloc[df_alloc["Building Name"]!="Não Alocado"]
+                    .groupby("Building Name")[eff_col]
+                    .sum()
+                    .reset_index(name="Occupied")
+                )
+
+                rem = cap.merge(occ,on="Building Name",how="left").fillna(0)
+                rem["Remaining"] = (rem["Capacity"]-rem["Occupied"]).clip(lower=0)
+                tot = rem[["Capacity","Occupied","Remaining"]].sum(); tot["Building Name"]="Total Geral"
+                rem = pd.concat([rem,pd.DataFrame([tot])],ignore_index=True)
+                rem = rem.round(0).astype({"Capacity":int,"Occupied":int,"Remaining":int})
+                rem = rem.sort_values("Building Name", ascending=True)
+                st.dataframe(rem.style.apply(highlight_total,axis=1), hide_index=True)
+
+                # 8) tabela de Grupos Não Alocados
+                st.write(f"#### Grupos e SubGrupos não alocados - {title}:")
+                nao_df = df_tot[df_tot["Building Name"]=="Não Alocado"].copy()
+                nao_df = nao_df.sort_values(["Building Name","Group","SubGroup"], ascending=True)
+                st.dataframe(nao_df.style.apply(highlight_rows,axis=1), hide_index=True)
+
+                # 9) exportar para Excel
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                    df_tot.to_excel(writer, sheet_name=title, index=False)
+                output.seek(0)
+                st.download_button(
+                    label=f"Download Excel - {title}",
+                    data=output.getvalue(),
+                    file_name=f"automacao_{title.lower().replace(' ','_')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_{title}"
+                )
+
+                # 10) salvar no session_state
+                key = f"dfautomation_{title.lower().replace(' ','_')}"
+                st.session_state[key] = df_tot
 
                 
-                # Função de exibição de alocação com as tabelas ajustadas
-                def display_allocation_peak(df_allocation, remaining_floors, df_building_trat):
-                        # Ordena e cria as colunas de Peak
-                    df_allocation = df_allocation.sort_values(by='Building Name')
-                    df_allocation['Peak with Exception'] = df_allocation.apply(
-                        lambda r: r['HeadCount'] if r['Exception (Y/N)']=='Y' else r['Proportional Peak'], axis=1
-                    )
-                    df_allocation['Peak % of HeadCount'] = (
-                        (df_allocation['Peak with Exception'] / df_allocation['HeadCount'])*100
-                    ).round(0).astype(int)
-                    df_allocation.drop(columns=['Proportional Peak'], inplace=True)
-                    df_allocation.rename(columns={'Proportional Avg':'Avg Occ'}, inplace=True)
-
-                        # Reordena colunas (inserindo as novas nos lugares certos)
-                    cols = [
-                        'Building Name','Group','SubGroup','FTE','CW','Growth',
-                        'HeadCount','Exception (Y/N)','Peak with Exception','Peak % of HeadCount',
-                        'Avg Occ','Adjacency Priority 1','Adjacency Priority 2',
-                        'Adjacency Priority 3','Current Location'
-                    ]
-                    df_allocation = df_allocation[cols]
-
-                        # Calcula subtotais e total geral
-                    num_cols = df_allocation.select_dtypes(include='number').columns.tolist()
-                    alocados     = df_allocation[df_allocation['Building Name']!='Não Alocado']
-                    nao_alocados = df_allocation[df_allocation['Building Name']=='Não Alocado']
-
-                    soma_alocados = alocados[num_cols].sum()
-                    soma_alocados['Building Name'] = 'Alocados'
-
-                    soma_nao = nao_alocados[num_cols].sum()
-                    soma_nao['Building Name'] = 'Não Alocados'
-
-                    soma_geral = df_allocation[num_cols].sum()
-                    soma_geral['Building Name'] = 'Total Geral'
-
-                    df_subtotais = pd.DataFrame(
-                        [soma_alocados, soma_nao, soma_geral],
-                        columns=df_allocation.columns
-                    )
-                    df_tot = pd.concat([df_allocation, df_subtotais], ignore_index=True)
-                    dfautomation_peak = df_tot.copy()
-
-                        # Cores alternadas por prédio (apenas para as linhas originais)
-                    unique_buildings = df_allocation['Building Name'].drop_duplicates().tolist()
-                    building_colors = {
-                        b: '#D3D3D3' if i % 2 == 0 else ''
-                        for i, b in enumerate(unique_buildings)
-                    }
-
-                    def highlight_rows(row):
-                        name = row['Building Name']
-                        if name == 'Total Geral':
-                            # Azul petróleo escuro + texto em branco
-                            return ['background-color: #004E64; color: #FFFFFF'] * len(row)
-                        if name in ('Alocados', 'Não Alocados'):
-                            # Tom mais claro do azul petróleo + texto em branco
-                            return ['background-color: #357A91; color: #FFFFFF'] * len(row)
-                        # linhas originais continuam com cinza claro alternado
-                        color = building_colors.get(name, '')
-                        return [f'background-color: {color}'] * len(row)
-                    
-
-                    st.write("#### Resultado da Automação - Peak")
-                    st.dataframe(dfautomation_peak.style.apply(highlight_rows, axis=1),
-                                use_container_width=False)
-
-                        # Tabela de capacidade x ocupado x restante
-                    cap = (
-                        df_building_trat[['Building Name','Primary Work Seats']]
-                        .rename(columns={'Primary Work Seats':'Capacity'})
-                    )
-                    rem_df = (
-                        pd.DataFrame(list(remaining_floors.items()),
-                                    columns=['Building Name','Remaining'])
-                        .merge(cap, on='Building Name', how='left')
-                    )
-                    rem_df['Occupied'] = rem_df['Capacity'] - rem_df['Remaining']
-                    rem_df = rem_df[['Building Name','Capacity','Occupied','Remaining']]
-
-                    st.write("#### Capacidade restante nos andares - Peak:")
-                    st.dataframe(rem_df, use_container_width=False)
-
-                    return dfautomation_peak, rem_df
-
-
-                # Carregar os dados e realizar a alocação
-                if "df_building_trat" in st.session_state and "df_proportional" in st.session_state:
-                    df_building_trat = st.session_state.df_building_trat
-                    df_proportional  = st.session_state.df_proportional
-                    floors = dict(zip(df_building_trat['Building Name'], df_building_trat['Primary Work Seats']))
-
-                    # Função de alocação específica de Peak (já existente no seu código)
-                    df_alloc_peak, remaining = allocate_groups_peak(df_proportional, floors.copy())
-
-                    # Exibe e captura os DataFrames estilizados
-                    dfautomation_peak, rem_peak_df = display_allocation_peak(
-                        df_alloc_peak, remaining, df_building_trat
-                    )
-                    st.session_state.dfautomation_peak = dfautomation_peak
-
-                        # Tabela de Não Alocados com Total em destaque
-                    df_peak_non = dfautomation_peak[dfautomation_peak['Building Name']=='Não Alocado']
-                    num_cols = df_peak_non.select_dtypes(include='number').columns
-                    total_row = df_peak_non[num_cols].sum()
-                    total_row['Building Name'] = 'Total'
-                    df_peak_non_total = pd.concat(
-                        [df_peak_non, pd.DataFrame([total_row])], ignore_index=True
-                    )
-
-                    def highlight_nonalloc_total(r):
-                        return (['background-color: #004E64; color: #FFFFFF']
-                                * len(r)) if r['Building Name']=='Total' else ['']*len(r)
-
-                    st.write("#### Grupos Não Alocados - Peak:")
-                    styled_non = df_peak_non_total.style.apply(highlight_nonalloc_total, axis=1)
-                    st.dataframe(styled_non, use_container_width=False)
-
-
-                # Botão para exportar tabela "Resultados das Simulações" para Excel
-                if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado_peak"):
-                    if "dfautomation_peak" in st.session_state:
-                        # Acessa o DataFrame salvo no session_state e substitui NaN por string vazia
-                        df_allocation_export = st.session_state.dfautomation_peak.fillna("")
-                        
-                        # Cria o arquivo Excel em memória
-                        output = io.BytesIO()
-                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                            df_allocation_export.to_excel(writer, sheet_name="Simulações PEAK", index=False)
-                        output.seek(0)
-                        
-                        # Botão de download, utilizando output.getvalue() para retornar os bytes do arquivo
-                        st.download_button(
-                            label="Download do Excel - Resultados das Simulações Peak",
-                            data=output.getvalue(),
-                            file_name="resultados_simulacoes_peak.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                    else:
-                        st.error("Data not found: 'dfautomation_peak' não está disponível no session_state.")
-
-
-
-            with st.expander("### Automação considerando Avg Occ"):
-                st.write("Para os Groups + SubGroups que são 'Exception = Y' o valor considerado é Headcount - 1:1.")
-
-                primary_work_seats = df_building_trat_total['Primary Work Seats'].iloc[-1].astype(int)
-                total_seats_on_floor = df_building_trat_total['Total seats on floor'].iloc[-1].astype(int)
-                total_propavg = df_proportional["Proportional Avg"].sum()
-                    
-                st.write(f"**Primary Work Seats**: {primary_work_seats} || **Total seats on floor**: {total_seats_on_floor}")
-
-                # Calcular o "Proportional Avg Exception" (Exception = Y) diretamente no backend
-                total_proportional_Avg_exception = df_proportional.apply(
-                    lambda row: row['HeadCount'] if row['Exception (Y/N)'] == 'Y' else row['Proportional Avg'],
-                    axis=1
-                ).sum()
-
-                # Exibir o valor total
-                st.write(f"**Total Avg**: {total_propavg} || **Total Avg with Exception**: {total_proportional_Avg_exception}")
-
-                
-                def allocate_groups_avg(df_proportional, floors):
-                    allocation = {}  # Armazenar a alocação de grupos por andar
-                    remaining_groups = df_proportional.sort_values(by='HeadCount', ascending=False)  # Ordenar por HeadCount
-                    floor_names = list(floors.keys())
-                    
-                    # Copiar df_proportional para adicionar a coluna 'Building Name'
-                    df_allocation = df_proportional.copy()
-                    df_allocation['Building Name'] = 'Não Alocado'  # Coluna inicializada com valor "Não Alocado"
-                    
-                    # Criar um valor único para grupos sem SubGrupo
-                    df_allocation['SubGroup'] = df_allocation['SubGroup'].fillna('NoSubGroup')
-                    
-                    # Alocar os grupos nos andares disponíveis
-                    for _, group in remaining_groups.iterrows():
-                        group_name = group['Group']
-                        subgroup_name = group['SubGroup']
-                        
-                        # Verificar se há exceção (se a coluna 'Exception' é 'Y')
-                        exception = group['Exception (Y/N)']  # Ajuste o nome da coluna conforme necessário
-                        
-                        # Se houver uma exceção (Exception = 'Y'), usar HeadCount; caso contrário, usar Proportional Peak
-                        if exception == 'Y':
-                            headcount = group['HeadCount']
-                        else:
-                            headcount = group['Proportional Avg']  # Use o valor de 'Proportional Peak' para o cálculo                        
-                        allocated = False  # Flag para verificar se o grupo foi alocado
-                        
-                        # Tentar alocar o grupo nos andares disponíveis
-                        for floor_name in floor_names:
-                            if floors[floor_name] >= headcount:
-                                # Se couber, aloca
-                                df_allocation.loc[(df_allocation['Group'] == group_name) & (df_allocation['SubGroup'] == subgroup_name), 'Building Name'] = floor_name
-                                floors[floor_name] -= headcount
-                                allocated = True  # Grupo foi alocado
-                                break
-                        
-                        # Se não alocou, marca como "Não Alocado"
-                        if not allocated:
-                            df_allocation.loc[(df_allocation['Group'] == group_name) & (df_allocation['SubGroup'] == subgroup_name), 'Building Name'] = 'Não Alocado'
-                    
-                    return df_allocation, floors
-
-                # Função de exibição de alocação com as tabelas ajustadas
-                def display_allocation_avg(df_allocation, remaining_floors, df_building_trat):
-                        # Ordena por prédio
-                    df_allocation = df_allocation.sort_values(by='Building Name')
-
-                        # Cálculo de Avg Occ with Exception e %
-                    df_allocation['Avg Occ with Exception'] = df_allocation.apply(
-                        lambda r: r['HeadCount'] if r['Exception (Y/N)']=='Y' else r['Proportional Avg'],
-                        axis=1
-                    )
-                    df_allocation['Avg Occ % of HeadCount'] = (
-                        (df_allocation['Avg Occ with Exception'] / df_allocation['HeadCount']) * 100
-                    ).round(0).astype(int)
-
-                        # Reordena colunas
-                    cols = [
-                        'Building Name','Group','SubGroup','FTE','CW','Growth',
-                        'HeadCount','Exception (Y/N)','Avg Occ with Exception','Avg Occ % of HeadCount',
-                        'Adjacency Priority 1','Adjacency Priority 2','Adjacency Priority 3','Current Location'
-                    ]
-                    df_allocation = df_allocation[cols]
-
-                        # Calcula subtotais e total geral
-                    num_cols = df_allocation.select_dtypes(include='number').columns.tolist()
-
-                    alocados     = df_allocation[df_allocation['Building Name']!='Não Alocado']
-                    nao_alocados = df_allocation[df_allocation['Building Name']=='Não Alocado']
-
-                    soma_alocados = alocados[num_cols].sum()
-                    soma_alocados['Building Name'] = 'Alocados'
-
-                    soma_nao = nao_alocados[num_cols].sum()
-                    soma_nao['Building Name'] = 'Não Alocados'
-
-                    soma_geral = df_allocation[num_cols].sum()
-                    soma_geral['Building Name'] = 'Total Geral'
-
-                    df_subtotais = pd.DataFrame(
-                        [soma_alocados, soma_nao, soma_geral],
-                        columns=df_allocation.columns
-                    )
-                    df_tot = pd.concat([df_allocation, df_subtotais], ignore_index=True)
-
-                        # Renomeia para o nome de cálculo
-                    dfautomation_avg = df_tot.copy()
-
-                        # Prepara cores alternadas por prédio
-                    unique_buildings = df_allocation['Building Name'].drop_duplicates().tolist()
-                    building_colors = {
-                        b: '#D3D3D3' if i % 2 == 0 else ''
-                        for i, b in enumerate(unique_buildings)
-                    }
-
-                    def highlight_rows(row):
-                        name = row['Building Name']
-                        if name == 'Total Geral':
-                            # Azul petróleo escuro + texto em branco
-                            return ['background-color: #004E64; color: #FFFFFF'] * len(row)
-                        if name in ('Alocados', 'Não Alocados'):
-                            # Tom mais claro do azul petróleo + texto em branco
-                            return ['background-color: #357A91; color: #FFFFFF'] * len(row)
-                        # linhas originais continuam com cinza claro alternado
-                        color = building_colors.get(name, '')
-                        return [f'background-color: {color}'] * len(row)
-
-                        # Exibição estilizada
-                    st.write("#### Resultado da Automação - Avg Occ")
-                    st.dataframe(
-                        dfautomation_avg
-                        .style.apply(highlight_rows, axis=1),
-                        use_container_width=False
-                    )
-
-                        # Tabela de capacidade x ocupado x restante
-                    cap = (
-                        df_building_trat[['Building Name','Primary Work Seats']]
-                        .rename(columns={'Primary Work Seats':'Capacity'})
-                    )
-                    rem_df = (
-                        pd.DataFrame(list(remaining_floors.items()),
-                                    columns=['Building Name','Remaining'])
-                        .merge(cap, on='Building Name', how='left')
-                    )
-                    rem_df['Occupied'] = rem_df['Capacity'] - rem_df['Remaining']
-                    rem_df = rem_df[['Building Name','Capacity','Occupied','Remaining']]
-
-                    st.write("#### Capacidade restante nos andares - Avg Occ:")
-                    st.dataframe(rem_df, use_container_width=False)
-
-                    return dfautomation_avg, rem_df
-
-
-                # Carregar os dados e realizar a alocação
-                if "df_building_trat" in st.session_state and "df_proportional" in st.session_state:
-                    df_building_trat = st.session_state.df_building_trat
-                    df_proportional  = st.session_state.df_proportional
-                    floors = dict(zip(df_building_trat['Building Name'], df_building_trat['Primary Work Seats']))
-
-                    # chamada à sua função de alocação específica p/ Avg Occ
-                    df_alloc_avg, remaining = allocate_groups_avg(df_proportional, floors.copy())
-
-                    # exibe e captura como dfautomation_avg
-                    dfautomation_avg, rem_avg_df = display_allocation_avg(
-                        df_alloc_avg, remaining, df_building_trat
-                    )
-                    st.session_state.dfautomation_avg = dfautomation_avg
-
-                        # Tabela “Não Alocados” com total destacado
-                    df_avg_non = dfautomation_avg[dfautomation_avg['Building Name']=='Não Alocado']
-                    tot = df_avg_non.select_dtypes(include='number').sum()
-                    tot['Building Name'] = 'Total'
-                    df_avg_non_total = pd.concat(
-                        [df_avg_non, pd.DataFrame([tot])], ignore_index=True
-                    )
-
-                    def highlight_nonalloc_total(r):
-                        return (
-                            ['background-color: #004E64; color: #FFFFFF'] * len(r)
-                            if r['Building Name']=='Total' else ['']*len(r)
-                        )
-
-                    st.write("#### Grupos Não Alocados - Avg Occ:")
-                    st.dataframe(
-                        df_avg_non_total.style.apply(highlight_nonalloc_total, axis=1),
-                        use_container_width=False
-                    )
-
-                # Botão para exportar tabela "Resultados das Simulações" para Excel
-                if st.button("Exportar Tabela 'Resultados das Simulações' para Excel", key="export_unificado_avgocc"):
-                    if "dfautomation_hc" in st.session_state:
-                        # Acessa o DataFrame salvo no session_state e substitui NaN por string vazia
-                        df_allocation_export = st.session_state.dfautomation_avg.fillna("")
-                        
-                        # Cria o arquivo Excel em memória
-                        output = io.BytesIO()
-                        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                            df_allocation_export.to_excel(writer, sheet_name="Simulações Avg OCC", index=False)
-                        output.seek(0)
-                        
-                        # Botão de download, utilizando output.getvalue() para retornar os bytes do arquivo
-                        st.download_button(
-                            label="Download do Excel - Resultados das Simulações Avg OCC",
-                            data=output.getvalue(),
-                            file_name="resultados_simulacoes_avgocc.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                    else:
-                        st.error("Data not found: 'dfautomation_hc' não está disponível no session_state.")
-        else:
-            st.write("Por favor, carregue o arquivo para prosseguir.") 
-
-
 
 
    ##### ABA CENÁRIOS #####
@@ -1260,7 +904,7 @@ def upload_arquivo():
 
 
 
-   ##### ABA DASHBOARDS #####
+    ##### ABA DASHBOARDS #####
     with tabs[3]:
         st.write("### DASHBOARDS")
 
@@ -1274,16 +918,14 @@ def upload_arquivo():
             st.info("Nenhum dado de alocação disponível. Execute a automação primeiro.")
             st.stop()
 
-
         # === BIG NUMBERS ===
         st.markdown("<h4 style='text-align:center'>Visão Consolidada</h4>", unsafe_allow_html=True)
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.markdown("<div style='background-color:#004E64;color:white;padding:10px;text-align:center'><b># Andares</b><br>" + str(df_building['Building Name'].nunique()) + "</div>", unsafe_allow_html=True)
-        col2.markdown("<div style='background-color:#B0B0B0;color:black;padding:10px;text-align:center'><b># Groups</b><br>" + str(df_hc['Group'].nunique()) + "</div>", unsafe_allow_html=True)
-        col3.markdown("<div style='background-color:#004E64;color:white;padding:10px;text-align:center'><b># Groups+SubGroups</b><br>" + str(df_hc[['Group','SubGroup']].drop_duplicates().shape[0]) + "</div>", unsafe_allow_html=True)
-        col4.markdown("<div style='background-color:#B0B0B0;color:black;padding:10px;text-align:center'><b>Total Primary Seats</b><br>" + str(df_building['Primary Work Seats'].sum()) + "</div>", unsafe_allow_html=True)
-        col5.markdown("<div style='background-color:#004E64;color:white;padding:10px;text-align:center'><b>Total Floor Seats</b><br>" + str(df_building['Total seats on floor'].sum()) + "</div>", unsafe_allow_html=True)
-
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.markdown(f"<div style='background:#004E64;color:white;padding:10px;text-align:center'><b># Andares</b><br>{df_building['Building Name'].nunique()}</div>", unsafe_allow_html=True)
+        c2.markdown(f"<div style='background:#B0B0B0;color:black;padding:10px;text-align:center'><b># Groups</b><br>{df_hc['Group'].nunique()}</div>", unsafe_allow_html=True)
+        c3.markdown(f"<div style='background:#004E64;color:white;padding:10px;text-align:center'><b># Groups+SubGroups</b><br>{df_hc[['Group','SubGroup']].drop_duplicates().shape[0]}</div>", unsafe_allow_html=True)
+        c4.markdown(f"<div style='background:#B0B0B0;color:black;padding:10px;text-align:center'><b>Total Primary Seats</b><br>{df_building['Primary Work Seats'].sum()}</div>", unsafe_allow_html=True)
+        c5.markdown(f"<div style='background:#004E64;color:white;padding:10px;text-align:center'><b>Total Floor Seats</b><br>{df_building['Total seats on floor'].sum()}</div>", unsafe_allow_html=True)
 
         # === Funções auxiliares ===
         def prepare_avail(df_base, key_col):
@@ -1308,18 +950,6 @@ def upload_arquivo():
 
             return df, df_summary
 
-       
-
-        def plot_donut(df_base, key_col, title):
-            df_base['Status'] = df_base['Building Name'].apply(lambda x: 'Alocado' if x!='Não Alocado' else 'Não Alocado')
-            by_status = df_base.groupby('Status').agg({key_col:'sum'}).reset_index()
-            fig = px.pie(by_status, names='Status', values=key_col, hole=0.3,
-                        color='Status',
-                        color_discrete_map={'Alocado':'#357A91','Não Alocado':'#FFAA33'},
-                        title=f"% Alloc {title}")
-            return fig, by_status
-        
-
         def style_summary_table(df):
             def highlight(row):
                 if row['Status'] == 'Total Geral':
@@ -1332,115 +962,279 @@ def upload_arquivo():
                     return [''] * len(row)
             return df.style.apply(highlight, axis=1)
         
-        # Adiciona um espaço maior usando <br> no Markdown
-        st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
 
+        def plot_donut(df_base, key_col, title):
+            df2 = df_base.copy()
+            df2['Status'] = df2['Building Name'].apply(lambda x:'Alocado' if x!='Não Alocado' else 'Não Alocado')
+            by_st = df2.groupby('Status')[key_col].sum().reset_index()
+            fig = px.pie(
+                by_st, names='Status', values=key_col, hole=0.3,
+                color='Status',
+                color_discrete_map={'Alocado':'#357A91','Não Alocado':'#FFAA33'},
+                title=f"% Alloc {title}"
+            )
+            return fig
 
-        # === VISÃO COMPARATIVA SUPERIOR ===
+        st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown("<h5 style='text-align:center'>Comparativo Consolidado</h5>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
 
-        for df_data, key_col, title, container in zip(
+        for df_data, key_col, title, cont in zip(
             [df_hc, df_peak, df_avg],
-            ['HeadCount', 'Peak with Exception', 'Avg Occ with Exception'],
-            ['HeadCount', 'Peak', 'Avg Occ'],
+            ['HeadCount','Peak with Exception','Avg Occ with Exception'],
+            ['HeadCount','Peak','Avg Occ'],
             [col1, col2, col3]
         ):
-            with container:
-                # Parte superior: consolida os totais
+            with cont:
+                # totais + donut
                 df_full, resumo = prepare_avail(df_data, key_col)
                 st.dataframe(style_summary_table(resumo), use_container_width=True, hide_index=True)
-
-                # Gráfico de donut
-                fig, _ = plot_donut(df_data, key_col, title)
+                fig = plot_donut(df_data, key_col, title)
                 st.plotly_chart(fig, use_container_width=True, key=f"donut_{title}")
 
-                # Parte inferior: apenas dados reais
-                #df_detail = df_full[~df_full['Building Name'].isin(['Alocado', 'Não Alocado', 'Total Geral'])]
+                # 1) Tabela detalhada de grupos
                 df_detail = df_full.copy()
-
-                # Identifica campo respectivo por cenário
-                if title == 'HeadCount':
-                    col_raw = 'HeadCount'
-                    # GroupBy apenas com o campo absoluto
-                    df_final = (
-                        df_detail
-                        .groupby(['Building Name', 'Group', 'SubGroup'], as_index=False)[[col_raw]]
-                        .sum()
-                    )
+                if title=='HeadCount':
+                    raw = 'HeadCount'
+                    df_final = df_detail.groupby(['Building Name','Group','SubGroup'], as_index=False)[[raw]].sum()
                 else:
-                    if title == 'Peak':
-                        col_raw = 'Peak with Exception'
-                        col_pct = 'Peak %'
-                    elif title == 'Avg Occ':
-                        col_raw = 'Avg Occ with Exception'
-                        col_pct = 'Avg %'
+                    raw = key_col
+                    pct = f"{title} %"
+                    tot = df_detail[raw].sum()
+                    df_detail[pct] = ((df_detail[raw]/tot)*100).round(0).astype(int)
+                    df_final = df_detail.groupby(['Building Name','Group','SubGroup'], as_index=False)[[raw,pct]].sum()
 
-                    # Cálculo de % com base no total real
-                    total_value = df_detail[col_raw].sum()
-                    df_detail[col_pct] = ((df_detail[col_raw] / total_value) * 100).round(0).astype(int)
-
-                    # GroupBy com campo absoluto + %
-                    df_final = (
-                        df_detail
-                        .groupby(['Building Name', 'Group', 'SubGroup'], as_index=False)[[col_raw, col_pct]]
-                        .sum()
-                    )
-
-
-                # Exibe resultado
                 st.dataframe(df_final, use_container_width=True, hide_index=True)
 
 
-        # Adiciona um espaço maior usando <br> no Markdown
-        st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
-        st.markdown("---")
+                # 2) Andares com capacidade disponível
+                cap_df = df_building[['Building Name','Primary Work Seats']]
+                used  = df_full.groupby('Building Name')[key_col].sum().reset_index(name='Total Occupied')
+                cap   = cap_df.merge(used, on='Building Name', how='left').fillna(0)
+                cap['Total Available'] = cap['Primary Work Seats'] - cap['Total Occupied']
+                cap_rem = cap[cap['Total Available']>0]
+                st.markdown(f"##### Andares com capacidade disponível - {title}", unsafe_allow_html=True)
+                st.dataframe(cap_rem[['Building Name','Primary Work Seats','Total Occupied','Total Available']], use_container_width=True, hide_index=True)                
+                
+
+        st.markdown("<br><br>---", unsafe_allow_html=True)
+
+
+
 
         # === DEEP DIVE ===
-        tabela_selecionada = st.selectbox(
-            'Escolha cenário para Deep Dive:',
-            ('HeadCount','Peak','Avg Occ')
-        )
+        tabela = st.selectbox('Escolha cenário para Deep Dive:', ['HeadCount','Peak','Avg Occ'])
 
         def render_deep(df_base, key_col, title):
             st.write(f"### Deep Dive: {title}")
 
-            colx, coly = st.columns([2, 1])
-            with colx:
-                df_grp = df_base.groupby('Group').agg({key_col:'sum'}).reset_index()
-                fig1 = px.pie(df_grp, names='Group', values=key_col, hole=0.3,
-                            title=f"Distribuição {title} por Group")
-                st.plotly_chart(fig1, use_container_width=True)
-            with coly:
-                st.dataframe(df_grp, use_container_width=True, hide_index=True)
+            # --- 1) Donut com label, valor e % no hover e pull para fatias pequenas ---
+            grp = df_base.groupby('Group')[key_col].sum().reset_index()
+            total = grp[key_col].sum()
+            grp['percent'] = (grp[key_col] / total * 100).round(0).astype(int)
 
-            # Adiciona um espaço maior usando <br> no Markdown
-            st.markdown("<br><br>", unsafe_allow_html=True)  # Adiciona 2 quebras de linha
+            # computa pull: fatias <5% puxam 0.1
+            pulls = [0.1 if p < 5 else 0 for p in grp['percent']]
+
+            fig1 = px.pie(
+                grp,
+                names='Group',
+                values=key_col,
+                hole=0.3,
+                title=f"Distribuição {title} por Group",
+                hover_data=[key_col, 'percent'],                # mostra valor e %
+                labels={key_col: 'Valor', 'percent': '%'},
+            )
+            fig1.update_traces(
+                texttemplate='%{label}<br>%{value} || %{percent}%',
+                textposition='inside',
+                pull=pulls,
+                hovertemplate=(
+                    "<b>%{label}</b><br>" +
+                    key_col + ": %{value}<br>" +
+                    "%{percent}%<extra></extra>"
+                ),
+                textfont_size=10
+            )
+            cA, cB = st.columns([3,1])
+            cA.plotly_chart(fig1, use_container_width=True, key=f"deep_donut_{title}")
+
+            # tabela ao lado
+            grp_table = grp.rename(columns={key_col: 'Total', 'percent': f'{title} %'})
+            grp_table = grp_table[['Group', 'Total', f'{title} %']].sort_values('Group')
+            cB.dataframe(grp_table, use_container_width=True, hide_index=True)
+
+            st.markdown("<br><br>", unsafe_allow_html=True)
+
+            # --- 2) Gráfico stacked horizontal com anotação de "Occupied || Primary || Total seats" ---
+            st.markdown(
+                "_Os números ao final de cada barra correspondem a:_  \n"
+                "Occupied** ― total ocupado  \n"
+                "Primary Work Seats** ― capacidade primária  \n"
+                "Total seats on floor** ― total de assentos no andar  \n"
+                "- Lembre-se que a alocação respeita o Primary Work Seats._"
+            )
 
             df_counts = df_base.groupby(['Building Name','Group'], as_index=False)[key_col].sum()
-            pivot = df_counts.pivot(index='Building Name',columns='Group',values=key_col).fillna(0)
-            pct   = pivot.div(pivot.sum(axis=1),axis=0)*100
-            df_long = pct.reset_index().melt('Building Name',var_name='Group',value_name='Percent')
-            df_long = df_long.merge(df_counts,on=['Building Name','Group'])
-            ord_b = sorted(df_long['Building Name'].unique())
-            ord_g = sorted(df_long['Group'].unique())
-            fig2 = px.bar(df_long, x='Percent', y='Building Name', color='Group', orientation='h',
-                        category_orders={'Building Name':ord_b,'Group':ord_g},
-                        labels={'Percent':f'% {title}','Building Name':'Andar'},
-                        title=f'% {title} por Grupo e Andar',
-                        hover_data={'Percent':':.1f', key_col:True})
-            fig2.update_layout(barmode='stack', xaxis=dict(ticksuffix='%'), margin=dict(l=80,r=20,t=30,b=30))
-            st.plotly_chart(fig2, use_container_width=True)
-            st.dataframe(df_counts, use_container_width=False, hide_index=True)
+            pivot = df_counts.pivot(index='Building Name', columns='Group', values=key_col).fillna(0)
 
-        if tabela_selecionada=='HeadCount':
-            render_deep(df_hc,'HeadCount','HeadCount')
-        elif tabela_selecionada=='Peak':
-            render_deep(df_peak,'Peak with Exception','Peak')
+            # garante todos os andares
+            for b in df_building['Building Name'].unique():
+                if b not in pivot.index:
+                    pivot.loc[b] = [0]*pivot.shape[1]
+            pivot = pivot.sort_index()
+
+            pct = pivot.div(pivot.sum(axis=1), axis=0)*100
+            long = pct.reset_index().melt('Building Name', var_name='Group', value_name='Percent')
+            long = long.merge(df_counts, on=['Building Name','Group'])
+
+            ord_b = list(pivot.index)
+            ord_g = sorted(df_counts['Group'].unique())
+
+            # mapeia capacidades
+            cap_map = df_building.set_index('Building Name')['Total seats on floor'].to_dict()
+            prim_map = df_building.set_index('Building Name')['Primary Work Seats'].to_dict()
+
+            fig2 = px.bar(
+                long,
+                x='Percent',
+                y='Building Name',
+                color='Group',
+                orientation='h',
+                category_orders={'Building Name': ord_b, 'Group': ord_g},
+                text=key_col,
+                title=f'% {title} por Grupo e Andar'
+            )
+            # labels dentro das divisões
+            fig2.update_traces(texttemplate='%{text}', textposition='inside')
+            # anotações fora das barras
+            for y_val in ord_b:
+                used = int(df_counts.loc[df_counts['Building Name']==y_val, key_col].sum())
+                prim = prim_map.get(y_val, 0)
+                total_fl = cap_map.get(y_val, 0)
+                fig2.add_annotation(
+                    x=100, y=y_val,
+                    text=f"{used} || {prim} || {total_fl}",
+                    showarrow=False,
+                    xanchor='left',
+                    font=dict(size=9)
+                )
+            fig2.update_layout(
+                barmode='stack',
+                xaxis=dict(ticksuffix='%'),
+                margin=dict(l=100, r=100, t=40, b=40),
+                height=600
+            )
+
+            bar_col, tab_col = st.columns([3,1])
+            bar_col.plotly_chart(fig2, use_container_width=True, key=f"deep_bar_{title}")
+
+            # --- 3) Tabela lateral: todos os campos solicitados ---
+            grp_cnt = (
+                df_base[['Building Name','Group','SubGroup']]
+                .drop_duplicates()
+                .groupby('Building Name')
+                .size()
+                .reset_index(name='Total Groups+SubGroups')
+            )
+            occ = df_base.groupby('Building Name')[key_col].sum().reset_index(name='Total Occupied')
+            prim = df_building[['Building Name','Primary Work Seats']].rename(
+                columns={'Primary Work Seats':'Primary Work Seats'}
+            )
+            total_fl = df_building[['Building Name','Total seats on floor']]
+            table = (
+                grp_cnt
+                .merge(occ, on='Building Name')
+                .merge(prim, on='Building Name')
+                .merge(total_fl, on='Building Name')
+            )
+            table['Total Available'] = table['Total seats on floor'] - table['Total Occupied']
+            table = table[
+                ['Building Name','Total Groups+SubGroups','Total Occupied',
+                'Primary Work Seats','Total seats on floor','Total Available']
+            ].sort_values(['Building Name'])
+            tab_col.dataframe(table, use_container_width=True, hide_index=True)
+
+        # chama o deep-dive
+        if tabela=='HeadCount':
+            render_deep(df_hc, 'HeadCount', 'HeadCount')
+        elif tabela=='Peak':
+            render_deep(df_peak, 'Peak with Exception', 'Peak')
         else:
-            render_deep(df_avg,'Avg Occ with Exception','Avg Occ')
+            render_deep(df_avg, 'Avg Occ with Exception', 'Avg Occ')
 
 
+        # === GRÁFICOS DE CAPACIDADE ===
+        st.markdown("<br><br><h5 style='text-align:center'>Capacidade por Tipo de Assentos</h5>", unsafe_allow_html=True)
+        df_seats = df_building.melt(
+            id_vars='Building Name',
+            value_vars=[
+                'Primary Work Seats','Alternative Work Seats',
+                'Total Enclosed Collab Seats','Total Open Collab Seats'
+            ],
+            var_name='Seat Type',
+            value_name='Available Seats'
+        )
+
+        fig3 = px.bar(
+            df_seats,
+            x='Available Seats',
+            y='Building Name',
+            color='Seat Type',
+            orientation='h',
+            title='Disponibilidade por Tipo de Assentos',
+            labels={'Available Seats':'Total Available Seats'}
+        )
+
+        # 1) Esconde os textos de cada segmento
+        fig3.update_traces(
+            texttemplate='%{x}',
+            textposition='inside'
+        )
+
+        # 2) Calcula o total por andar
+        totals = df_seats.groupby('Building Name')['Available Seats'].sum()
+
+        # 3) Adiciona annotation com o total no final de cada barra
+        for bld, tot in totals.items():
+            fig3.add_annotation(
+                x=tot, 
+                y=bld,
+                text=str(int(tot)),
+                showarrow=False,
+                xanchor='left',
+                font=dict(size=10)
+            )
+
+        # 4) Ajustes de layout
+        fig3.update_layout(
+            height=500,
+            margin=dict(l=100, r=50, t=40, b=40)
+        )
+
+        st.plotly_chart(fig3, use_container_width=True, key='cap_tipo_assentos')
+
+
+        st.markdown("<br><br><h5 style='text-align:center'>Total de Assentos por Andar</h5>", unsafe_allow_html=True)
+        df_floor = df_building[[
+            'Building Name','Total Individual seats on floor','Total Collab seats on floor'
+        ]].melt(
+            id_vars='Building Name',
+            var_name='Seat Category',
+            value_name='Seats'
+        )
+        fig4 = px.bar(
+            df_floor,
+            x='Building Name',
+            y='Seats',
+            color='Seat Category',
+            barmode='group',
+            title='Assentos Individuais vs Colaborativos por Andar'
+        )
+        # exibe labels de cada barra
+        fig4.update_traces(texttemplate='%{y}', textposition='auto')
+        fig4.update_layout(height=500, margin=dict(l=80,r=50,t=40,b=40))
+        st.plotly_chart(fig4, use_container_width=True, key='cap_andar_tipo')
 
 
 # Tela Inicial com Seleção
