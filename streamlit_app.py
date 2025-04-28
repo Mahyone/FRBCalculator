@@ -908,12 +908,13 @@ def upload_arquivo():
     with tabs[3]:
         st.write("### DASHBOARDS")
 
-        # Carrega os DataFrames do session_state
-        df_hc       = st.session_state.get('dfautomation_hc', pd.DataFrame())
-        df_peak     = st.session_state.get('dfautomation_peak', pd.DataFrame())
-        df_avg      = st.session_state.get('dfautomation_avg', pd.DataFrame())
+        # Agora usamos as mesmas chaves que criamos em Automação:
+        df_hc    = st.session_state.get('dfautomation_headcount', pd.DataFrame())
+        df_peak  = st.session_state.get('dfautomation_peak', pd.DataFrame())
+        df_avg   = st.session_state.get('dfautomation_avg_occ', pd.DataFrame())
         df_building = st.session_state.get('df_building_trat', pd.DataFrame())
 
+        # Se não houver dados, interrompe
         if df_hc.empty or df_building.empty:
             st.info("Nenhum dado de alocação disponível. Execute a automação primeiro.")
             st.stop()
@@ -993,6 +994,7 @@ def upload_arquivo():
                 st.plotly_chart(fig, use_container_width=True, key=f"donut_{title}")
 
                 # 1) Tabela detalhada de grupos
+                st.markdown(f"##### Grupos nos seus respectivos - {title}", unsafe_allow_html=True)
                 df_detail = df_full.copy()
                 if title=='HeadCount':
                     raw = 'HeadCount'
@@ -1005,6 +1007,7 @@ def upload_arquivo():
                     df_final = df_detail.groupby(['Building Name','Group','SubGroup'], as_index=False)[[raw,pct]].sum()
 
                 st.dataframe(df_final, use_container_width=True, hide_index=True)
+                st.markdown("<br><br>", unsafe_allow_html=True)
 
 
                 # 2) Andares com capacidade disponível
@@ -1068,11 +1071,8 @@ def upload_arquivo():
 
             # --- 2) Gráfico stacked horizontal com anotação de "Occupied || Primary || Total seats" ---
             st.markdown(
-                "_Os números ao final de cada barra correspondem a:_  \n"
-                "Occupied** ― total ocupado  \n"
-                "Primary Work Seats** ― capacidade primária  \n"
-                "Total seats on floor** ― total de assentos no andar  \n"
-                "- Lembre-se que a alocação respeita o Primary Work Seats._"
+                "Os números ao final de cada barra correspondem a: Occupied || Primary Work Seats || Total seats on floor  \n"
+                "- Lembre-se que a alocação respeita o Primary Work Seats."
             )
 
             df_counts = df_base.groupby(['Building Name','Group'], as_index=False)[key_col].sum()
