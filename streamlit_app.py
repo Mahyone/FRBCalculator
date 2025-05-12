@@ -1,4 +1,7 @@
 
+
+
+
 import streamlit as st
 from PIL import Image
 import pandas as pd
@@ -17,6 +20,15 @@ st.set_page_config(page_title="Calculadora FRB - Alocação", page_icon="📊", 
 # Carregar e exibir o logo
 logo = Image.open("FRBConsulting_Logo.PNG")  
 st.image(logo, use_container_width=False) 
+
+def freeze_section(building):
+    """Congela a seção do building no tab3."""
+    st.session_state[f"freeze_tab3_{building}"] = True
+
+def reset_section(building):
+    """Destrava a seção do building e limpa a seleção."""
+    st.session_state[f"freeze_tab3_{building}"] = False
+    st.session_state[f"include_tab3_{building}"] = []
 
 
 # Função para o Upload de Arquivo (script original do Upload)
@@ -38,13 +50,12 @@ def upload_arquivo():
         del st.session_state.df_enriquecido
     if "df_proportional" in st.session_state:
         del st.session_state.df_proportional
-
      
     # Título da aplicação
     st.write("### Leitura e Processamento de Abas do Excel")
 
     # Dividir a interface em abas
-    tabs = st.tabs(["Importar Arquivo", "Automação", "Cenarios", "Dashboards"])
+    tabs = st.tabs(["Importar Arquivo", "Automação", "Cenarios", "Cenarios - testes por inclusão", "Dashboards"])
 
 
     ##### ABA IMPORTAÇÃO #####   
@@ -449,11 +460,11 @@ def upload_arquivo():
                 if title == "Peak":
                     total_pp = int(df_proportional["Proportional Peak"].sum())
                     total_pp_exc = int(dfp["Peak with Exception"].sum())
-                    st.write(f"**Peak**: {total_pp}  ||  **Peak with Exception**: {total_pp_exc}")
+                    st.write(f"**HeadCount**: {int(dfp['HeadCount'].sum())} || **Peak**: {total_pp}  ||  **Peak with Exception**: {total_pp_exc}")
                 elif title == "Avg Occ":
                     total_pa = int(df_proportional["Proportional Avg"].sum())
                     total_pa_exc = int(dfp["Avg Occ with Exception"].sum())
-                    st.write(f"**Avg Occ**: {total_pa}  ||  **Avg Occ with Exception**: {total_pa_exc}")
+                    st.write(f"**HeadCount**: {int(dfp['HeadCount'].sum())} || **Avg Occ**: {total_pa}  ||  **Avg Occ with Exception**: {total_pa_exc}")
                 else:  # HeadCount
                     st.write(f"**HeadCount**: {int(dfp['HeadCount'].sum())}")
 
@@ -598,7 +609,8 @@ def upload_arquivo():
                 # Selectbox dentro do expander para escolha da visualização
                 view_option = st.selectbox(
                     "Selecione a visualização:",
-                    options=["Meu cenário", "Automação HeadCount", "Automação Peak", "Automação Avg Occ"]
+                    options=["Meu cenário", "Automação HeadCount", "Automação Peak", "Automação Avg Occ"],
+                    key="view_option_tab2"
                 )
 
                 if view_option == "Meu cenário":
@@ -682,7 +694,11 @@ def upload_arquivo():
                         df_building_data['SubGroup'].fillna('') + ' - ' +
                         df_building_data['1:1'].astype(str)
                     )
-                    group_subgroup_options = df_building_data['Concat_G_SB_HC'].drop_duplicates().tolist()
+                    group_subgroup_options = sorted(
+                        df_building_data['Concat_G_SB_HC']
+                        .drop_duplicates()
+                        .tolist()
+                    )
             
                     # Chave exclusiva para as seleções desta seção
                     building_key = f"selected_options_{building}"
@@ -698,21 +714,24 @@ def upload_arquivo():
                     # Se a seção já tiver sido gravada, usa a seleção gravada e desabilita o multiselect;
                     # caso contrário, as opções disponíveis são as que não foram gravadas em outras seções.
                     if st.session_state[building_key]:
-                        available_options = st.session_state[building_key]
+                        available_options = sorted(st.session_state[building_key])
                         multiselect_disabled = True
                     else:
-                        available_options = [opt for opt in group_subgroup_options if opt not in global_recorded]
+                        # mantém só as não gravadas, mas ordenadas
+                        available_options = sorted(
+                            opt for opt in group_subgroup_options
+                            if opt not in global_recorded
+                        )
                         multiselect_disabled = False
             
                     # Exibe o multiselect – inicialmente, todas as opções disponíveis são selecionadas
                     selected_options = st.multiselect(
                         "Selecione os Grupos e Subgrupos (incluindo 1:1)",
-                        options=available_options,
-                        default=available_options,
-                        key=f"multiselect_{building}",
+                        options=group_subgroup_options,        # já vem ordenado
+                        default=group_subgroup_options,        # mantém o default ordenado
+                        key=f"multiselect_tab2_{building}",
                         disabled=multiselect_disabled
                     )
-            
                     # Filtra a tabela de acordo com a seleção feita
                     if selected_options:
                         df_building_data_filtered = df_building_data[df_building_data['Concat_G_SB_HC'].isin(selected_options)]
@@ -742,7 +761,7 @@ def upload_arquivo():
                     risk_value = st.text_input(
                         f"Risk (numérico, sem '%') para {building}",
                         value="",
-                        key=f"risk_input_{building}"
+                        key=f"risk_input_tab2_{building}"
                     )
                     risk_value = int(risk_value) if risk_value else 0
             
@@ -809,7 +828,7 @@ def upload_arquivo():
                         st.success(f"Dados do prédio **{building}** gravados com sucesso!")
             
                     # Botão para Resetar a Seção (apenas esta seção é resetada)
-                    if st.button(f"Resetar Seção para {building}"):
+                    if st.button(f"Resetar Seção para {building}", key=f"reset_tab2_{building}"):
                         st.session_state[building_key] = []  # Limpa as seleções desta seção
                         try:
                             st.experimental_rerun()
@@ -903,83 +922,369 @@ def upload_arquivo():
 
 
 
+ ###### ABA CENÁRIOS - TESTES POR INCLUSÃO #####
+    with tabs[3]:
+        st.write("### Cenários de Alocação — Inclusão de Grupos/Subgrupos")
+
+        # Carrega df_proportional
+        df_proportional = st.session_state.get("df_proportional", pd.DataFrame())
+        if df_proportional.empty:
+            st.info("Nenhum cenário disponível para inclusão.")
+        else:
+            # Prepara cenários
+            df_pc = df_proportional.copy()[[
+                "Group","SubGroup","Exception (Y/N)","HeadCount",
+                "Proportional Peak","Proportional Avg"
+            ]]
+            df_pc.rename(columns={
+                "HeadCount":"1:1","Proportional Peak":"Peak","Proportional Avg":"Avg Occ"
+            }, inplace=True)
+
+            with st.expander("#### **Informações Cadastradas**"):
+                view_option = st.selectbox(
+                    "Selecione a visualização:",
+                    ["Meu cenário","Automação HeadCount","Automação Peak","Automação Avg Occ"],
+                    key="view_option_tab3"
+                )
+                df_pc.sort_values(["Group","SubGroup"], inplace=True)
+                if view_option=="Meu cenário":
+                    st.dataframe(df_pc, use_container_width=False, hide_index=True)
+                elif view_option=="Automação HeadCount":
+                    st.dataframe(st.session_state.get("dfautomation_hc", pd.DataFrame()), use_container_width=False, hide_index=True)
+                elif view_option=="Automação Peak":
+                    st.dataframe(st.session_state.get("dfautomation_peak", pd.DataFrame()), use_container_width=False, hide_index=True)
+                else:
+                    st.dataframe(st.session_state.get("dfautomation_avg", pd.DataFrame()), use_container_width=False, hide_index=True)
+
+            # Acumula e cruza com edifícios
+            df_pc["Lugares Ocupados 1:1"] = df_pc["1:1"].cumsum()
+            df_final = df_building_trat.merge(df_pc, how="cross")
+            df_final["Chave"] = df_final.apply(
+                lambda r: f"{r['Group']} - {r['SubGroup']}" if r['SubGroup'] else f"{r['Group']} - ",
+                axis=1
+            )
+
+
+            # aplica exceções e acumulados Peak/Avg...
+            def calc_ocup(row, col, hc):
+                return row[hc] if row['Exception (Y/N)']=='Y' else row[col]
+            df_final['Lugares Ocupados Peak'] = df_final.apply(
+                lambda r: calc_ocup(r, 'Peak','1:1'), axis=1
+            )
+            df_final['Lugares Ocupados Avg'] = df_final.apply(
+                lambda r: calc_ocup(r, 'Avg Occ','1:1'), axis=1
+            )
+            df_final['Lugares Ocupados Peak'] = df_final.groupby('Building Name')['Lugares Ocupados Peak'].cumsum()
+            df_final['Lugares Ocupados Avg'] = df_final.groupby('Building Name')['Lugares Ocupados Avg'].cumsum()
+            df_final['Lugares Disponíveis Peak'] = (
+                df_final.groupby('Building Name')['Primary Work Seats'].transform('first')
+                - df_final['Lugares Ocupados Peak']
+            )
+            df_final['Lugares Disponíveis Avg'] = (
+                df_final.groupby('Building Name')['Primary Work Seats'].transform('first')
+                - df_final['Lugares Ocupados Avg']
+            )
+
+           # Garante dicts no session_state
+            st.session_state.setdefault("tables_to_append_dict", {})
+            st.session_state.setdefault("final_consolidated_df", pd.DataFrame())
+
+            # Loop por andar
+            for building in df_final["Building Name"].unique():
+                freeze_key = f"freeze_tab3_{building}"
+                state_key  = f"include_tab3_{building}"
+                # init flags e listas
+                st.session_state.setdefault(freeze_key, False)
+                st.session_state.setdefault(state_key, [])
+
+                with st.expander(f"#### Informações do Andar: {building}"):
+                    dfb = df_final[df_final["Building Name"]==building].copy()
+                    dfb.sort_values(["Group","SubGroup"], inplace=True)
+
+                    st.write(f"**Primary Work Seats**: {dfb['Primary Work Seats'].iat[0]}")
+                    st.write(f"**Total seats on floor**: {dfb['Total seats on floor'].iat[0]}")
+
+                    # prepara dropdown
+                    dfb["Concat"] = dfb["Group"] + " - " + dfb["SubGroup"].fillna("") + " - " + dfb["1:1"].astype(str)
+                    all_opts = sorted(dfb["Concat"].unique())
+
+                    # coleta inclusões de outras seções
+                    other_includes = set()
+                    for k,v in st.session_state.items():
+                        if k.startswith("include_tab3_") and k!=state_key:
+                            other_includes.update(v)
+
+                    available = [o for o in all_opts if o not in other_includes]
+
+                    sel = st.multiselect(
+                        "Selecione os Grupos/Subgrupos para INCLUIR:",
+                        options=available,
+                        default=st.session_state[state_key],
+                        key=state_key,
+                        disabled=st.session_state[freeze_key]
+                    )
+
+                    # aplica filtro
+                    dfb_f = dfb[dfb["Concat"].isin(sel)].copy() if sel else dfb.copy()
+
+                    # recálculos dinâmicos
+                    dfb_f['Lugares Ocupados 1:1'] = dfb_f['1:1'].cumsum()
+                    dfb_f['Lugares Disponíveis 1:1'] = (
+                        dfb_f.groupby('Building Name')['Primary Work Seats'].transform('first')
+                        - dfb_f['Lugares Ocupados 1:1']
+                    )
+                    dfb_f['Lugares Ocupados Peak'] = dfb_f['Peak'].cumsum()
+                    dfb_f['Lugares Disponíveis Peak'] = (
+                        dfb_f.groupby('Building Name')['Primary Work Seats'].transform('first')
+                        - dfb_f['Lugares Ocupados Peak']
+                    )
+                    dfb_f['Lugares Ocupados Avg'] = dfb_f['Avg Occ'].cumsum()
+                    dfb_f['Lugares Disponíveis Avg'] = (
+                        dfb_f.groupby('Building Name')['Primary Work Seats'].transform('first')
+                        - dfb_f['Lugares Ocupados Avg']
+                    )
+
+                    # risco
+                    risk = st.text_input(
+                        f"Risk (numérico, sem '%') para {building}",
+                        value="",
+                        key=f"risk_input_tab3_{building}"
+                    )
+                    risk = int(risk) if risk else 0
+                    for col in ['1:1','Peak','Avg Occ']:
+                        dfb_f[f"Risk {col}"] = (dfb_f[col] * (1 - risk/100)).round(0).astype(int)
+                        dfb_f[f"Saldo Risk {col}"] = (
+                            dfb_f['Primary Work Seats'] - dfb_f[f"Risk {col}"]
+                        ).round(0).astype(int)
+
+                    # renomeia p/ exibição
+                    dfb_f.rename(columns={
+                        "Lugares Disponíveis 1:1": "Saldo 1:1",
+                        "Lugares Ocupados 1:1": "Occupied 1:1",
+                        "Lugares Ocupados Peak": "Occupied Peak",
+                        "Lugares Disponíveis Peak": "Saldo Peak",
+                        "Lugares Ocupados Avg": "Occupied Avg",
+                        "Lugares Disponíveis Avg": "Saldo Avg Occ"
+                    }, inplace=True)
+
+                    # styling
+                    cols_show = [
+                        'Building Name','Group','SubGroup','Exception (Y/N)',
+                        '1:1','Saldo 1:1','Peak','Saldo Peak','Avg Occ','Saldo Avg Occ'
+                    ]
+                    if risk:
+                        cols_show += [f"Saldo Risk {c}" for c in ['1:1','Peak','Avg Occ']]
+                    styled = dfb_f[cols_show].style
+                    styled = styled.applymap(lambda v: 'background-color:#FFBDBD' if isinstance(v,(int,float)) and v<0 else 'background-color:white',
+                                            subset=['1:1','Saldo 1:1','Peak','Saldo Peak','Avg Occ','Saldo Avg Occ'])
+                    if risk:
+                        styled = styled.applymap(lambda v:'background-color:#DDEBF7',
+                                                subset=[f"Saldo Risk {c}" for c in ['1:1','Peak','Avg Occ']])
+                    # Exibe tabela já ordenada
+                    dfb_f.sort_values(["Group","SubGroup"], inplace=True)
+                    st.dataframe(styled , use_container_width=True, hide_index=True)
+
+                    # Botão GRAVAR → congela seção
+                    st.button(
+                        f"Gravar Dados para {building}",
+                        key=f"save_tab3_btn_{building}",
+                        on_click=freeze_section,
+                        args=(building,)
+                    )
+
+                    # Botão RESETAR → destrava e limpa seleção
+                    st.button(
+                        f"Resetar Seção para {building}",
+                        key=f"reset_tab3_btn_{building}",
+                        on_click=reset_section,
+                        args=(building,)
+                    )
+
+            # expander do consolidado (igual ao tab2)
+            with st.expander("### **Resultado de todos os Cenários:**"):
+                # só se já houver algo gravado
+                if st.session_state.get("tables_to_append_dict"):
+                    st.write("### **Dados Gravados**")
+
+                    # 1) Concatena e limpa dados
+                    final = pd.concat(
+                        st.session_state["tables_to_append_dict"].values(), 
+                        ignore_index=True
+                    )
+                    # arredonda e trata numéricos
+                    num_cols = final.select_dtypes(include="number").columns
+                    final[num_cols] = (
+                        final[num_cols]
+                        .replace([np.inf, -np.inf, np.nan], 0)
+                        .round(0)
+                        .astype(int)
+                    )
+
+                    # 2) Estiliza
+                    def colorize(v):
+                        if isinstance(v, (int, float)):
+                            return "background-color: white" if v >= 0 else "background-color: #FFBDBD"
+                        return "background-color: white"
+
+                    styled_final = final.style.applymap(
+                        colorize, 
+                        subset=["1:1", "Saldo 1:1", "Peak", "Saldo Peak", "Avg Occ", "Saldo Avg Occ"]
+                    )
+
+                    st.write("#### **Consolidado de todos os cenários:**")
+                    st.dataframe(styled_final, use_container_width=True, hide_index=True)
+
+                    # 3) Monta chaves para identificar o que não foi alocado
+                    final["Chave"] = final.apply(
+                        lambda r: f"{r['Group']} - {r['SubGroup']}" if r["SubGroup"] else f"{r['Group']} - ",
+                        axis=1
+                    )
+
+                    # recria o df de cenários originais (df_pc) para gerar todas as chaves
+                    df_ps = df_pc.copy()
+                    df_ps["Chave"] = df_ps.apply(
+                        lambda r: f"{r['Group']} - {r['SubGroup']}" if r["SubGroup"] else f"{r['Group']} - ",
+                        axis=1
+                    )
+
+                    # identifica os não alocados
+                    consolidated_keys = final[["Chave"]].drop_duplicates()
+                    df_non_alloc = (
+                        df_ps
+                        .merge(consolidated_keys, on="Chave", how="left", indicator=True)
+                        .query('_merge == "left_only"')
+                        .drop(columns="_merge")
+                    )
+
+                    st.write("#### **Grupos e Subgrupos Não Alocados**")
+                    st.dataframe(df_non_alloc, use_container_width=True, hide_index=True)
+
+                    # guarda o final consolidado
+                    st.session_state["final_consolidated_df"] = final
+
+                    # 4) Exportar para Excel
+                    if st.button("Exportar 'Cenários' para Excel", key="export_tab3_cenarios"):
+                        with io.BytesIO() as output:
+                            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                                final.to_excel(writer, sheet_name="Cenarios", index=False)
+                                df_non_alloc.to_excel(writer, sheet_name="Não Alocados", index=False)
+                            output.seek(0)
+                            st.download_button(
+                                "Download do Excel - Resultados dos Cenários",
+                                data=output.getvalue(),
+                                file_name="resultados_cenarios_tab3.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                else:
+                    st.write("Nenhum dado foi gravado ainda.")
+
+
 
     ##### ABA DASHBOARDS #####
-    with tabs[3]:
+    with tabs[4]:
         st.write("### DASHBOARDS")
 
-        # Agora usamos as mesmas chaves que criamos em Automação:
-        df_hc    = st.session_state.get('dfautomation_headcount', pd.DataFrame())
-        df_peak  = st.session_state.get('dfautomation_peak', pd.DataFrame())
-        df_avg   = st.session_state.get('dfautomation_avg_occ', pd.DataFrame())
+        # Pega os dataframes da automação
+        df_hc       = st.session_state.get('dfautomation_headcount', pd.DataFrame())
+        df_peak     = st.session_state.get('dfautomation_peak', pd.DataFrame())
+        df_avg      = st.session_state.get('dfautomation_avg_occ', pd.DataFrame())
         df_building = st.session_state.get('df_building_trat', pd.DataFrame())
 
-        # Se não houver dados, interrompe
+        # Se não tiver dados, interrompe
         if df_hc.empty or df_building.empty:
             st.info("Nenhum dado de alocação disponível. Execute a automação primeiro.")
             st.stop()
 
         # === BIG NUMBERS ===
-        st.markdown("<h4 style='text-align:center'>Visão Consolidada</h4>", unsafe_allow_html=True)
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.markdown(f"<div style='background:#004E64;color:white;padding:10px;text-align:center'><b># Andares</b><br>{df_building['Building Name'].nunique()}</div>", unsafe_allow_html=True)
-        c2.markdown(f"<div style='background:#B0B0B0;color:black;padding:10px;text-align:center'><b># Groups</b><br>{df_hc['Group'].nunique()}</div>", unsafe_allow_html=True)
-        c3.markdown(f"<div style='background:#004E64;color:white;padding:10px;text-align:center'><b># Groups+SubGroups</b><br>{df_hc[['Group','SubGroup']].drop_duplicates().shape[0]}</div>", unsafe_allow_html=True)
-        c4.markdown(f"<div style='background:#B0B0B0;color:black;padding:10px;text-align:center'><b>Total Primary Seats</b><br>{df_building['Primary Work Seats'].sum()}</div>", unsafe_allow_html=True)
-        c5.markdown(f"<div style='background:#004E64;color:white;padding:10px;text-align:center'><b>Total Floor Seats</b><br>{df_building['Total seats on floor'].sum()}</div>", unsafe_allow_html=True)
+        total_hc = int(
+            df_hc
+            .groupby(['Group','SubGroup'], as_index=False)['HeadCount']
+            .sum()['HeadCount']
+            .sum()
+        )
 
-        # === Funções auxiliares ===
+        cols = st.columns(6)
+        cols[0].markdown(
+            f"<div style='background:#B0B0B0;color:black;padding:10px;text-align:center'><b>Total HeadCount</b><br>{total_hc}</div>",
+            unsafe_allow_html=True
+        )
+        cols[1].markdown(
+            f"<div style='background:#004E64;color:white;padding:10px;text-align:center'><b># Andares</b><br>{df_building['Building Name'].nunique()}</div>",
+            unsafe_allow_html=True
+        )
+        cols[2].markdown(
+            f"<div style='background:#B0B0B0;color:black;padding:10px;text-align:center'><b># Groups</b><br>{df_hc['Group'].nunique()}</div>",
+            unsafe_allow_html=True
+        )
+        cols[3].markdown(
+            f"<div style='background:#004E64;color:white;padding:10px;text-align:center'><b># Groups+SubGroups</b><br>{df_hc[['Group','SubGroup']].drop_duplicates().shape[0]}</div>",
+            unsafe_allow_html=True
+        )
+        cols[4].markdown(
+            f"<div style='background:#B0B0B0;color:black;padding:10px;text-align:center'><b>Total Primary Seats</b><br>{int(df_building['Primary Work Seats'].sum())}</div>",
+            unsafe_allow_html=True
+        )
+        cols[5].markdown(
+            f"<div style='background:#004E64;color:white;padding:10px;text-align:center'><b>Total Floor Seats</b><br>{int(df_building['Total seats on floor'].sum())}</div>",
+            unsafe_allow_html=True
+        )
+
+        # === FUNÇÕES AUXILIARES ATUALIZADAS ===
         def prepare_avail(df_base, key_col):
-            df = pd.merge(df_base,
-                        df_building[['Building Name','Primary Work Seats','Total seats on floor']],
-                        on='Building Name', how='left')
-            df = df.sort_values(['Building Name','Group','SubGroup'])
+            # 1) Agrega por Building/Group/SubGroup para evitar duplicados
+            df_agg = (
+                df_base
+                .groupby(['Building Name','Group','SubGroup'], as_index=False)[[key_col]]
+                .sum()
+            )
+            # 2) merge com capacidade dos andares
+            df = pd.merge(
+                df_agg,
+                df_building[['Building Name','Primary Work Seats','Total seats on floor']],
+                on='Building Name', how='left'
+            ).sort_values(['Building Name','Group','SubGroup'])
+            # 3) define status
+            df['Status'] = df['Building Name'].apply(
+                lambda x: 'Não Alocado' if x == 'Não Alocado' else 'Alocado'
+            )
 
-            # Cria coluna auxiliar para classificação
-            df['Status'] = df['Building Name'].apply(lambda x: 'Não Alocado' if x == 'Não Alocado' else 'Alocado')
-
-            # Totais
-            total_geral = df[key_col].sum()
-            alocado = df[df['Status'] == 'Alocado'][key_col].sum()
-            nao_alocado = df[df['Status'] == 'Não Alocado'][key_col].sum()
-
+            # 4) calcula totais a partir do agregado
+            total_geral   = int(df[key_col].sum())
+            alocado       = int(df.loc[df['Status']=='Alocado', key_col].sum())
+            nao_alocado   = int(df.loc[df['Status']=='Não Alocado', key_col].sum())
             df_summary = pd.DataFrame([
-                {'Status': 'Alocado', key_col: alocado},
-                {'Status': 'Não Alocado', key_col: nao_alocado},
-                {'Status': 'Total Geral', key_col: total_geral}
+                {'Status':'Alocado',       key_col: alocado},
+                {'Status':'Não Alocado',   key_col: nao_alocado},
+                {'Status':'Total Geral',   key_col: total_geral}
             ])
-
             return df, df_summary
 
         def style_summary_table(df):
             def highlight(row):
-                if row['Status'] == 'Total Geral':
-                    return ['background-color: #004E64; color: white'] * len(row)
-                elif row['Status'] == 'Alocado':
-                    return ['background-color: #357A91; color: black'] * len(row)
-                elif row['Status'] == 'Não Alocado':
-                    return ['background-color: #FFAA33; color: black'] * len(row)
-                else:
-                    return [''] * len(row)
+                if row['Status']=='Total Geral':
+                    return ['background-color:#004E64;color:white']*len(row)
+                if row['Status']=='Alocado':
+                    return ['background-color:#357A91;color:black']*len(row)
+                return ['background-color:#FFAA33;color:black']*len(row)
             return df.style.apply(highlight, axis=1)
-        
 
         def plot_donut(df_base, key_col, title):
-            df2 = df_base.copy()
-            df2['Status'] = df2['Building Name'].apply(lambda x:'Alocado' if x!='Não Alocado' else 'Não Alocado')
+            # usa mesmo df_agg para consistência
+            df2, _ = prepare_avail(df_base, key_col)
             by_st = df2.groupby('Status')[key_col].sum().reset_index()
             fig = px.pie(
-                by_st, names='Status', values=key_col, hole=0.3,
+                by_st,
+                names='Status', values=key_col,
+                hole=0.3,
                 color='Status',
                 color_discrete_map={'Alocado':'#357A91','Não Alocado':'#FFAA33'},
                 title=f"% Alloc {title}"
             )
             return fig
 
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.markdown("<h5 style='text-align:center'>Comparativo Consolidado</h5>", unsafe_allow_html=True)
+        # === COMPARATIVO CONSOLIDADO ===
+        st.markdown("<br><h5 style='text-align:center'>Comparativo Consolidado</h5>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
-
         for df_data, key_col, title, cont in zip(
             [df_hc, df_peak, df_avg],
             ['HeadCount','Peak with Exception','Avg Occ with Exception'],
@@ -987,43 +1292,40 @@ def upload_arquivo():
             [col1, col2, col3]
         ):
             with cont:
-                # totais + donut
                 df_full, resumo = prepare_avail(df_data, key_col)
                 st.dataframe(style_summary_table(resumo), use_container_width=True, hide_index=True)
-                fig = plot_donut(df_data, key_col, title)
-                st.plotly_chart(fig, use_container_width=True, key=f"donut_{title}")
+                st.plotly_chart(plot_donut(df_data, key_col, title), use_container_width=True, key=f"donut_{title}")
 
-                # 1) Tabela detalhada de grupos
+                # tabela de detalhe
                 st.markdown(f"##### Grupos nos seus respectivos - {title}", unsafe_allow_html=True)
-                df_detail = df_full.copy()
                 if title=='HeadCount':
-                    raw = 'HeadCount'
-                    df_final = df_detail.groupby(['Building Name','Group','SubGroup'], as_index=False)[[raw]].sum()
+                    df_det = df_full.groupby(['Building Name','Group','SubGroup'], as_index=False)['HeadCount'].sum()
                 else:
+                    df_det = df_full.copy()
                     raw = key_col
                     pct = f"{title} %"
-                    tot = df_detail[raw].sum()
-                    df_detail[pct] = ((df_detail[raw]/tot)*100).round(0).astype(int)
-                    df_final = df_detail.groupby(['Building Name','Group','SubGroup'], as_index=False)[[raw,pct]].sum()
+                    tot = df_det[raw].sum()
+                    df_det[pct] = ((df_det[raw]/tot)*100).round(0).astype(int)
+                    df_det = df_det.groupby(['Building Name','Group','SubGroup'], as_index=False)[[raw,pct]].sum()
+                st.dataframe(df_det, use_container_width=True, hide_index=True)
 
-                st.dataframe(df_final, use_container_width=True, hide_index=True)
-                st.markdown("<br><br>", unsafe_allow_html=True)
-
-
-                # 2) Andares com capacidade disponível
-                cap_df = df_building[['Building Name','Primary Work Seats']]
-                used  = df_full.groupby('Building Name')[key_col].sum().reset_index(name='Total Occupied')
-                cap   = cap_df.merge(used, on='Building Name', how='left').fillna(0)
+                # capacidade disponível
+                cap = (
+                    df_building[['Building Name','Primary Work Seats']]
+                    .merge(df_full.groupby('Building Name')[key_col].sum().reset_index(name='Total Occupied'),
+                        on='Building Name', how='left')
+                    .fillna(0)
+                )
                 cap['Total Available'] = cap['Primary Work Seats'] - cap['Total Occupied']
                 cap_rem = cap[cap['Total Available']>0]
                 st.markdown(f"##### Andares com capacidade disponível - {title}", unsafe_allow_html=True)
-                st.dataframe(cap_rem[['Building Name','Primary Work Seats','Total Occupied','Total Available']], use_container_width=True, hide_index=True)                
-                
+                st.dataframe(
+                    cap_rem[['Building Name','Primary Work Seats','Total Occupied','Total Available']],
+                    use_container_width=True, hide_index=True
+                )
+                st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown("<br><br>---", unsafe_allow_html=True)
-
-
-
+        st.markdown("<hr>", unsafe_allow_html=True)
 
         # === DEEP DIVE ===
         tabela = st.selectbox('Escolha cenário para Deep Dive:', ['HeadCount','Peak','Avg Occ'])
@@ -1070,7 +1372,8 @@ def upload_arquivo():
             st.markdown("<br><br>", unsafe_allow_html=True)
 
             # --- 2) Gráfico stacked horizontal com anotação de "Occupied || Primary || Total seats" ---
-            st.markdown(
+            st.markdown("**Distribuição de Grupos por Andar**")
+            st.write(
                 "Os números ao final de cada barra correspondem a: Occupied || Primary Work Seats || Total seats on floor  \n"
                 "- Lembre-se que a alocação respeita o Primary Work Seats."
             )
@@ -1102,8 +1405,7 @@ def upload_arquivo():
                 color='Group',
                 orientation='h',
                 category_orders={'Building Name': ord_b, 'Group': ord_g},
-                text=key_col,
-                title=f'% {title} por Grupo e Andar'
+                text=key_col
             )
             # labels dentro das divisões
             fig2.update_traces(texttemplate='%{text}', textposition='inside')
